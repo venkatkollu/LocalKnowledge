@@ -87,7 +87,7 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS ingestion_jobs (
             id TEXT PRIMARY KEY, kind TEXT NOT NULL, status TEXT NOT NULL, total INTEGER DEFAULT 0,
             completed INTEGER DEFAULT 0, failed INTEGER DEFAULT 0, error TEXT,
-            created_at REAL NOT NULL, started_at REAL, finished_at REAL
+            summary TEXT, created_at REAL NOT NULL, started_at REAL, finished_at REAL
         );
         CREATE TABLE IF NOT EXISTS query_logs (
             id INTEGER PRIMARY KEY, request_id TEXT NOT NULL, query TEXT NOT NULL,
@@ -102,6 +102,9 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_chunks_version ON chunks(version_id);
         CREATE INDEX IF NOT EXISTS idx_jobs_created ON ingestion_jobs(created_at DESC);
         """)
+        job_columns = {row[1] for row in con.execute("PRAGMA table_info(ingestion_jobs)").fetchall()}
+        if "summary" not in job_columns:
+            con.execute("ALTER TABLE ingestion_jobs ADD COLUMN summary TEXT")
 
 
 def sha256(data: bytes) -> str:
@@ -110,6 +113,12 @@ def sha256(data: bytes) -> str:
 
 def tokenize(text: str) -> list[str]:
     return re.findall(r"[a-zA-Z0-9_+#.-]{2,}", text.lower())
+
+
+def remove_fts_for_document(con: sqlite3.Connection, document_id: int) -> None:
+    rows = con.execute("SELECT c.id,c.content,c.section,d.path FROM chunks c JOIN documents d ON d.id=c.document_id WHERE c.document_id=?", (document_id,)).fetchall()
+    for row in rows:
+        con.execute("INSERT INTO chunks_fts(chunks_fts,rowid,content,section,path) VALUES('delete',?,?,?,?)", (row["id"], row["content"], row["section"], row["path"]))
 
 
 def extract(path: Path) -> str:
@@ -197,21 +206,39 @@ def index_file(path: Path) -> dict[str, Any]:
         with db() as con:
             old = con.execute("SELECT * FROM documents WHERE path=?", (str(path),)).fetchone()
             if old and old["content_hash"] == content_hash and old["status"] == "indexed":
-                return {"path": str(path), "status": "unchanged", "chunks": con.execute("SELECT COUNT(*) FROM chunks WHERE document_id=? AND version_id=(SELECT id FROM document_versions WHERE document_id=? AND version=? )", (old["id"], old["id"], old["version"])).fetchone()[0], "version": old["version"]}
+                count = con.execute("SELECT COUNT(*) FROM chunks WHERE document_id=? AND version_id=(SELECT id FROM document_versions WHERE document_id=? AND version=? )", (old["id"], old["id"], old["version"])).fetchone()[0]
+                return {"path": str(path), "filename": path.name, "status": "unchanged", "change_type": "unchanged", "chunks_before": count, "chunks_after": count, "reused_embeddings": count, "new_embeddings": 0, "added_chunks": 0, "removed_chunks": 0, "version": old["version"]}
             version = (old["version"] + 1) if old else 1
+            previous_chunks = {}
             if old:
+                previous_rows = con.execute("SELECT c.chunk_hash,c.embedding,c.embedding_model FROM chunks c JOIN document_versions v ON v.id=c.version_id WHERE c.document_id=? AND v.version=?", (old["id"], old["version"])).fetchall()
+                previous_chunks = {row["chunk_hash"]: (row["embedding"], row["embedding_model"]) for row in previous_rows if row["embedding"]}
+            part_hashes = [sha256(part[0].encode()) for part in parts]
+            reusable = [previous_chunks[h] if h in previous_chunks else None for h in part_hashes]
+            missing_indices = [i for i, value in enumerate(reusable) if value is None]
+            missing_vectors, new_embedding_model = embed_texts([parts[i][0] for i in missing_indices])
+            for index, vector in zip(missing_indices, missing_vectors):
+                reusable[index] = (json.dumps(vector), new_embedding_model)
+            old_hashes = set(previous_chunks)
+            new_hashes = set(part_hashes)
+            reused_count = len(old_hashes & new_hashes)
+            added_count = len(new_hashes - old_hashes)
+            removed_count = len(old_hashes - new_hashes)
+            change_type = "added" if not old else "changed"
+            if old:
+                remove_fts_for_document(con, old["id"])
                 con.execute("UPDATE documents SET content_hash=?,size=?,modified=?,version=?,status='processing',error=NULL,updated_at=? WHERE id=?", (content_hash, stat.st_size, stat.st_mtime, version, time.time(), old["id"]))
                 doc_id = old["id"]
             else:
                 doc_id = con.execute("INSERT INTO documents(path,filename,content_hash,size,modified,version,status,updated_at) VALUES(?,?,?,?,?,?,?,?)", (str(path), path.name, content_hash, stat.st_size, stat.st_mtime, version, "processing", time.time())).lastrowid
-            version_id = con.execute("INSERT INTO document_versions(document_id,version,content_hash,size,parser_version,chunker_version,embedding_model,created_at) VALUES(?,?,?,?,?,?,?,?)", (doc_id, version, content_hash, stat.st_size, "1.0", "1.0", EMBED_MODEL, time.time())).lastrowid
-            embeddings, actual_model = embed_texts([part[0] for part in parts])
-            con.execute("UPDATE document_versions SET embedding_model=? WHERE id=?", (actual_model, version_id))
-            for i, ((content, section, page), vector) in enumerate(zip(parts, embeddings)):
-                chunk_id = con.execute("INSERT INTO chunks(document_id,version_id,chunk_index,chunk_hash,content,section,page,embedding,embedding_model) VALUES(?,?,?,?,?,?,?,?,?)", (doc_id, version_id, i, sha256(content.encode()), content, section, page, json.dumps(vector), actual_model)).lastrowid
+            default_embedding_model = new_embedding_model if missing_vectors else (next(iter(previous_chunks.values()))[1] if previous_chunks else EMBED_MODEL)
+            version_id = con.execute("INSERT INTO document_versions(document_id,version,content_hash,size,parser_version,chunker_version,embedding_model,created_at) VALUES(?,?,?,?,?,?,?,?)", (doc_id, version, content_hash, stat.st_size, "1.0", "1.0", default_embedding_model, time.time())).lastrowid
+            for i, ((content, section, page), vector_data) in enumerate(zip(parts, reusable)):
+                vector, actual_model = vector_data
+                chunk_id = con.execute("INSERT INTO chunks(document_id,version_id,chunk_index,chunk_hash,content,section,page,embedding,embedding_model) VALUES(?,?,?,?,?,?,?,?,?)", (doc_id, version_id, i, part_hashes[i], content, section, page, vector, actual_model)).lastrowid
                 con.execute("INSERT INTO chunks_fts(rowid,content,section,path) VALUES(?,?,?,?)", (chunk_id, content, section, str(path)))
             con.execute("UPDATE documents SET status='indexed',updated_at=? WHERE id=?", (time.time(), doc_id))
-        return {"path": str(path), "status": "indexed", "chunks": len(parts), "version": version, "embedding_model": actual_model}
+        return {"path": str(path), "filename": path.name, "status": "indexed", "change_type": change_type, "chunks_before": len(previous_chunks), "chunks_after": len(parts), "reused_embeddings": reused_count, "new_embeddings": len(missing_indices), "added_chunks": added_count, "removed_chunks": removed_count, "version": version, "embedding_model": default_embedding_model}
     except Exception as exc:
         with db() as con:
             old = con.execute("SELECT id FROM documents WHERE path=?", (str(path),)).fetchone()
@@ -234,13 +261,29 @@ def scan(job_id: str | None = None) -> dict[str, Any]:
     current = {str(p) for p in paths}
     with db() as con:
         deleted = 0
+        deleted_documents = []
         for row in con.execute("SELECT id,path FROM documents").fetchall():
             if row["path"] not in current:
-                con.execute("DELETE FROM chunks_fts WHERE rowid IN (SELECT id FROM chunks WHERE document_id=?)", (row["id"],))
+                remove_fts_for_document(con, row["id"])
                 con.execute("DELETE FROM documents WHERE id=?", (row["id"],)); deleted += 1
+                deleted_documents.append(row["path"])
+        summary = {
+            "documents_scanned": len(results),
+            "documents_added": [r["filename"] for r in results if r.get("change_type") == "added"],
+            "documents_changed": [r["filename"] for r in results if r.get("change_type") == "changed"],
+            "documents_unchanged": [r["filename"] for r in results if r.get("change_type") == "unchanged"],
+            "documents_failed": [r["filename"] for r in results if r.get("status") == "failed" and r.get("filename")],
+            "documents_deleted": deleted_documents,
+            "chunks_before": sum(r.get("chunks_before", 0) for r in results),
+            "chunks_after": sum(r.get("chunks_after", 0) for r in results),
+            "added_chunks": sum(r.get("added_chunks", 0) for r in results),
+            "removed_chunks": sum(r.get("removed_chunks", 0) for r in results),
+            "reused_embeddings": sum(r.get("reused_embeddings", 0) for r in results),
+            "new_embeddings": sum(r.get("new_embeddings", 0) for r in results),
+        }
         if job_id:
-            con.execute("UPDATE ingestion_jobs SET status='completed',finished_at=? WHERE id=?", (time.time(), job_id))
-    return {"files": len(results), "deleted": deleted, "results": results}
+            con.execute("UPDATE ingestion_jobs SET status='completed',summary=?,finished_at=? WHERE id=?", (json.dumps(summary), time.time(), job_id))
+    return {"files": len(results), "deleted": deleted, "summary": summary, "results": results}
 
 
 def bm25(query: str, limit: int = 40) -> list[dict[str, Any]]:
@@ -409,7 +452,21 @@ def versions(document_id: int) -> list[dict[str, Any]]:
 def job_status(job_id: str) -> dict[str, Any]:
     with db() as con: row = con.execute("SELECT * FROM ingestion_jobs WHERE id=?", (job_id,)).fetchone()
     if not row: raise HTTPException(404, "Job not found")
-    return dict(row)
+    result = dict(row)
+    if result.get("summary"):
+        try: result["summary"] = json.loads(result["summary"])
+        except json.JSONDecodeError: pass
+    return result
+
+
+@app.get("/changes/latest")
+def latest_changes() -> dict[str, Any]:
+    with db() as con:
+        row = con.execute("SELECT * FROM ingestion_jobs WHERE status='completed' AND summary IS NOT NULL ORDER BY finished_at DESC LIMIT 1").fetchone()
+    if not row: return {"status": "no_sync_yet", "summary": None}
+    result = dict(row)
+    result["summary"] = json.loads(result["summary"])
+    return result
 
 
 @app.post("/documents/sync")

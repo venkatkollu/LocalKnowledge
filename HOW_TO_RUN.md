@@ -119,7 +119,52 @@ Available terminal commands:
 /quit     Exit
 ```
 
-## 6. Start the web service manually
+## 6. Chunk-level incremental indexing
+
+KnowledgeOS does **not** re-embed the whole database when a document changes.
+
+For every file, it compares:
+
+```text
+SHA-256(document)
+        ↓
+changed document only
+        ↓
+SHA-256(each chunk)
+        ↓
+reuse existing embedding for matching chunk hashes
+embed only new or modified chunks
+```
+
+Example: if a document has 20 chunks and only 2 changed, the sync reuses 18 embeddings and creates only 2 new embeddings. The previous document version remains available in SQLite metadata.
+
+When you run `/sync`, the terminal prints:
+
+```text
+documents_added
+documents_changed
+documents_deleted
+chunks_before
+chunks_after
+added_chunks
+removed_chunks
+reused_embeddings
+new_embeddings
+```
+
+You can also inspect the latest report without the terminal client:
+
+```bash
+curl http://127.0.0.1:8000/changes/latest
+```
+
+The job endpoint also includes the report:
+
+```bash
+curl http://127.0.0.1:8000/jobs/YOUR_JOB_ID
+```
+
+## 7. Start the web service manually
 
 Development mode:
 
@@ -139,7 +184,7 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
 At startup, a background sync job is queued. The UI's **Queue full sync** button also returns a job ID and does not block the API request.
 
-## 7. Verify health and monitor jobs
+## 8. Verify health and monitor jobs
 
 ```bash
 curl http://127.0.0.1:8000/health
@@ -161,7 +206,7 @@ curl http://127.0.0.1:8000/jobs/YOUR_JOB_ID
 
 A job moves through `queued`, `running`, and `completed`. A failed document is recorded as `failed`; the remaining files continue indexing.
 
-## 8. Ask questions and inspect retrieval
+## 9. Ask questions and inspect retrieval
 
 Hybrid retrieval without generation:
 
@@ -181,7 +226,7 @@ curl -X POST http://127.0.0.1:8000/chat \\
 
 The response contains `citations`, document versions, `retrieval_ms`, `generation_ms`, `request_id`, and the selected model. Retrieved documents are treated as untrusted data, not instructions.
 
-## 9. Run an evaluation
+## 10. Run an evaluation
 
 Create a JSON payload:
 
@@ -205,7 +250,7 @@ curl http://127.0.0.1:8000/evaluation/results
 
 The current benchmark reports **Recall@5** and **MRR** for source retrieval. Expand the dataset with factual, multi-document, temporal, and negative questions before presenting results.
 
-## 10. Configuration
+## 11. Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -224,7 +269,7 @@ The current benchmark reports **Recall@5** and **MRR** for source retrieval. Exp
 | `MAX_CONTEXT_CHARS` | `10000` | Context bound sent to the LLM |
 | `KNOWLEDGEOS_AUTO_SYNC` | `1` | Queue a startup sync when enabled |
 
-## 11. Run tests
+## 12. Run tests
 
 ```bash
 .venv/bin/python -m pytest -q

@@ -74,6 +74,18 @@ def print_result(data: dict) -> None:
     print()
 
 
+def wait_for_sync(base_url: str, job_id: str) -> None:
+    print(f"Sync job {job_id[:8]} started. Waiting for chunk-level changes…")
+    deadline = time.time() + 300
+    while time.time() < deadline:
+        status = httpx.get(f"{base_url}/jobs/{job_id}", timeout=10).json()
+        if status.get("status") in {"completed", "failed"}:
+            print(json.dumps(status.get("summary") or {"status": status.get("status"), "error": status.get("error")}, indent=2))
+            return
+        time.sleep(0.5)
+    print("Sync is still running. Use the API job endpoint to inspect it.")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Start KnowledgeOS and use it from the terminal.")
     parser.add_argument("--host", default=os.getenv("KNOWLEDGEOS_HOST", "127.0.0.1"))
@@ -110,7 +122,9 @@ def main() -> int:
                 continue
             if command == "/sync":
                 response = httpx.post(f"{base_url}/documents/sync", timeout=10)
-                print(json.dumps(response.json(), indent=2))
+                payload = response.json()
+                print(json.dumps(payload, indent=2))
+                wait_for_sync(base_url, payload["job_id"])
                 continue
             response = httpx.post(f"{base_url}/chat", json={"query": prompt, "top_k": 6}, timeout=240)
             if not response.is_success:

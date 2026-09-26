@@ -10,6 +10,7 @@ The project now goes beyond a demo chatbot. It includes incremental and versione
 |---|---|
 | Ingestion | Background sync jobs with job IDs and progress state |
 | Change detection | SHA-256 document hashing; unchanged files are skipped |
+| Chunk-level reuse | Matching chunk hashes reuse prior embeddings; only new/modified chunks are embedded |
 | Versioning | `document_versions` preserves content hash, parser/chunker versions, and embedding model |
 | Chunking | Paragraph-aware chunks with overlap and section metadata |
 | Embeddings | LM Studio `/v1/embeddings` using `text-embedding-nomic-embed-text-v1.5`; deterministic local fallback otherwise |
@@ -84,6 +85,7 @@ This starts the API automatically, checks `http://127.0.0.1:1234/v1/models`, acc
 | `GET /documents/{id}/versions` | Version history and embedding metadata |
 | `POST /documents/sync` | Queue a background full sync; returns `job_id` |
 | `GET /jobs/{job_id}` | Poll a sync job |
+| `GET /changes/latest` | View the latest added/changed/deleted document and chunk summary |
 | `POST /documents/index` | Upload and index one supported file |
 | `POST /search` | Hybrid retrieval without generation |
 | `POST /chat` | Retrieval, reranking, grounded generation, and citations |
@@ -122,3 +124,7 @@ local-knowledgeos/
 ## Honest scope
 
 This is production-oriented for a **single-user local deployment**, not a multi-tenant cloud service. SQLite is intentional: it is reliable, zero-operations, and appropriate for a personal laptop. When the corpus or concurrency grows beyond that boundary, the seams are ready for PostgreSQL + pgvector, Redis-backed job queues, a real cross-encoder reranker, and a process supervisor. The project does not claim zero hallucinations; it provides evidence constraints, citations, abstention, and measurable retrieval/generation traces.
+
+### Incremental embedding guarantee
+
+Indexing is document-level for detecting changed files, then chunk-level for embedding work. A changed document is split again, chunk hashes are compared with the previous version, matching hashes reuse their stored vectors, and only new/modified chunks call the embedding provider. Sync summaries expose `chunks_before`, `chunks_after`, `reused_embeddings`, `new_embeddings`, `added_chunks`, and `removed_chunks`.
