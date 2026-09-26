@@ -1,31 +1,56 @@
-# How to run Local KnowledgeOS — production-local profile
+# How to run Local KnowledgeOS — production-local mode
 
-This profile is optimized for an Intel i5 11th Gen laptop with 24 GB RAM and a 2 GB MX450. Run inference on CPU/RAM. Do not make the MX450 a hard dependency.
+These instructions target Ubuntu/Linux, macOS, and Windows through WSL. The project is designed for CPU/RAM inference on an i5 11th Gen, 24 GB RAM laptop with a 2 GB MX450.
 
-## 1. Install
+## 1. Install prerequisites
+
+Install Python 3.11 or newer:
+
+```bash
+python3 --version
+```
+
+Install [LM Studio](https://lmstudio.ai). It provides the local OpenAI-compatible server used by the default configuration.
+
+## 2. Create the environment
+
+From the project directory:
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate        # Windows PowerShell: .venv\\Scripts\\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Windows PowerShell activation is `.venv\\Scripts\\Activate.ps1`.
+## 3. Configure LM Studio
 
-## 2. Prepare your corpus
+In LM Studio:
 
-Put private files under:
+1. Download/load `qwen/qwen3-0.6b`.
+2. Open **Developer**.
+3. Start the local server.
+4. Confirm the server URL is `http://127.0.0.1:1234/v1`.
 
-```text
-data/knowledge/
+Verify the exact model ID:
+
+```bash
+curl http://127.0.0.1:1234/v1/models
 ```
 
-Supported extensions include Markdown, text, code, JSON, YAML, CSV, HTML, CSS, SQL, and text-based PDFs. The application only indexes this explicitly configured directory.
+The response should contain `qwen/qwen3-0.6b`. If your ID is different, set it before starting KnowledgeOS:
 
-## 3. Install local models (recommended)
+```bash
+export LMSTUDIO_MODEL='your-exact-model-id'
+```
 
-Install [Ollama](https://ollama.com), then run:
+The embedding model is configured as `text-embedding-nomic-embed-text-v1.5`. If your LM Studio model list shows another embedding ID, set:
+
+```bash
+export LMSTUDIO_EMBED_MODEL='your-exact-embedding-model-id'
+```
+
+Ollama remains an optional fallback provider:
 
 ```bash
 ollama pull qwen3:4b
@@ -33,16 +58,68 @@ ollama pull nomic-embed-text
 ollama serve
 ```
 
-`qwen3:4b` is the default generation model. Use the larger model only when latency is acceptable:
+Use `qwen3:8b` only as a slower quality mode:
 
 ```bash
 ollama pull qwen3:8b
 export OLLAMA_MODEL=qwen3:8b
 ```
 
-The application still starts if Ollama is absent. It uses deterministic local hash embeddings and an extractive fallback response, which makes testing and offline operation possible.
+The MX450 is not required. Do not expect the 2 GB GPU to hold a 4B/8B model reliably; CPU/RAM inference is the supported baseline.
 
-## 4. Start the server
+Without Ollama, the application still works using a deterministic local hash embedding fallback and extractive grounded answers. This is useful for smoke tests, but Ollama embeddings will give substantially better semantic retrieval.
+
+## 4. Add documents
+
+Put Markdown, text, source code, JSON/YAML/CSV, HTML/CSS/SQL, or text-based PDFs under:
+
+```text
+data/knowledge/
+```
+
+Subdirectories are supported. Only this explicitly configured directory is indexed.
+
+## 5. Easiest option: terminal prompt mode
+
+This is the recommended workflow. It starts the API automatically, checks the LM Studio connection, accepts prompts in the terminal, and prints the answer, retrieval evaluation, timings, and citations beneath each prompt:
+
+```bash
+source .venv/bin/activate
+python run_local.py
+```
+
+Example:
+
+```text
+KnowledgeOS is ready
+  LM Studio: connected at http://127.0.0.1:1234/v1
+
+You> How did I implement caching?
+
+ANSWER
+...
+
+RETRIEVAL EVALUATION
+Dense candidates       40
+BM25 candidates        40
+RRF candidates         30
+Reranked               30
+Final context          6
+Retrieval latency      42.1 ms
+Generation latency     1840.2 ms
+Total latency          1882.9 ms
+```
+
+Available terminal commands:
+
+```text
+/sync     Queue a background document sync
+/health   Check LM Studio and corpus status
+/help     Show commands
+/quit     Exit
+```
+
+## 6. Start the web service manually
 
 Development mode:
 
@@ -51,22 +128,23 @@ source .venv/bin/activate
 uvicorn app:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Production-like single-user mode:
+Production-like local mode:
 
 ```bash
+source .venv/bin/activate
 uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
-Startup indexing is asynchronous. The UI can be opened immediately while the corpus is being processed.
+At startup, a background sync job is queued. The UI's **Queue full sync** button also returns a job ID and does not block the API request.
 
-## 5. Monitor ingestion
-
-Check health:
+## 7. Verify health and monitor jobs
 
 ```bash
 curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/metrics
+curl http://127.0.0.1:8000/documents
 ```
 
 Queue a sync:
@@ -75,90 +153,97 @@ Queue a sync:
 curl -X POST http://127.0.0.1:8000/documents/sync
 ```
 
-The response contains a `job_id`. Check progress:
+Copy the returned `job_id` and inspect it:
 
 ```bash
-curl http://127.0.0.1:8000/jobs/JOB_ID_HERE
+curl http://127.0.0.1:8000/jobs/YOUR_JOB_ID
 ```
 
-View current documents and versions:
+A job moves through `queued`, `running`, and `completed`. A failed document is recorded as `failed`; the remaining files continue indexing.
+
+## 8. Ask questions and inspect retrieval
+
+Hybrid retrieval without generation:
 
 ```bash
-curl http://127.0.0.1:8000/documents
-curl http://127.0.0.1:8000/documents/1/versions
-```
-
-View metrics:
-
-```bash
-curl http://127.0.0.1:8000/metrics
-```
-
-## 6. Query the RAG pipeline
-
-Retrieve evidence only:
-
-```bash
-curl -X POST http://127.0.0.1:8000/search \
-  -H 'Content-Type: application/json' \
+curl -X POST http://127.0.0.1:8000/search \\
+  -H 'Content-Type: application/json' \\
   -d '{"query":"How did I implement caching?","top_k":6}'
 ```
 
-Generate a grounded cited answer:
+Grounded RAG answer with citations and timings:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/chat \
-  -H 'Content-Type: application/json' \
+curl -X POST http://127.0.0.1:8000/chat \\
+  -H 'Content-Type: application/json' \\
   -d '{"query":"How did I implement caching?","top_k":6}'
 ```
 
-Upload a single file:
+The response contains `citations`, document versions, `retrieval_ms`, `generation_ms`, `request_id`, and the selected model. Retrieved documents are treated as untrusted data, not instructions.
 
-```bash
-curl -X POST http://127.0.0.1:8000/documents/index -F 'file=@README.md'
+## 9. Run an evaluation
+
+Create a JSON payload:
+
+```json
+{
+  "questions": [
+    {"question": "Which database stores durable data?", "expected_sources": ["sample.md"]},
+    {"question": "What is used for caching?", "expected_source": "sample.md"}
+  ]
+}
 ```
 
-## 7. Run evaluation
-
-Create a small golden set using your own filenames and facts:
+Run it:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/evaluation/run \
-  -H 'Content-Type: application/json' \
-  -d '{"questions":[{"question":"What is used for caching?","expected_source":"sample.md"}]}'
+curl -X POST http://127.0.0.1:8000/evaluation/run \\
+  -H 'Content-Type: application/json' \\
+  --data @evaluation.json
+curl http://127.0.0.1:8000/evaluation/results
 ```
 
-The response reports `recall_at_5`, `mrr`, retrieved filenames, and per-question ranks. Run this before and after retrieval changes instead of claiming unmeasured quality improvements.
+The current benchmark reports **Recall@5** and **MRR** for source retrieval. Expand the dataset with factual, multi-document, temporal, and negative questions before presenting results.
 
-## 8. Configuration
+## 10. Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `KNOWLEDGEOS_KNOWLEDGE` | `data/knowledge` | Explicit corpus directory |
-| `KNOWLEDGEOS_DATA` | `data` | Application data directory |
-| `KNOWLEDGEOS_DB` | `data/knowledgeos.db` | SQLite database |
-| `OLLAMA_URL` | `http://127.0.0.1:11434` | Local Ollama URL |
-| `OLLAMA_MODEL` | `qwen3:4b` | Generation model |
-| `EMBED_MODEL` | `nomic-embed-text` | Embedding model |
-| `EMBED_DIM` | `384` | Offline hash-vector dimension |
-| `MAX_CONTEXT_CHARS` | `10000` | Context budget before generation |
-| `INDEX_WORKERS` | `2` | Background worker count |
-| `KNOWLEDGEOS_AUTO_SYNC` | `1` | Queue a startup scan |
+| `KNOWLEDGEOS_KNOWLEDGE` | `data/knowledge` | Explicit directory to index |
+| `KNOWLEDGEOS_DATA` | `data` | SQLite database directory |
+| `KNOWLEDGEOS_DB` | `data/knowledgeos.db` | Database path |
+| `LLM_PROVIDER` | `lmstudio` | `lmstudio`, `ollama`, or `auto` |
+| `LMSTUDIO_URL` | `http://127.0.0.1:1234/v1` | LM Studio OpenAI-compatible base URL |
+| `LMSTUDIO_MODEL` | `qwen/qwen3-0.6b` | Exact model ID from `/v1/models` |
+| `LMSTUDIO_EMBED_MODEL` | `text-embedding-nomic-embed-text-v1.5` | Exact embedding model ID in LM Studio |
+| `OLLAMA_URL` | `http://127.0.0.1:11434` | Optional Ollama fallback endpoint |
+| `OLLAMA_MODEL` | `qwen3:4b` | Optional Ollama fallback model |
+| `EMBED_MODEL` | `nomic-embed-text` | Embedding model requested from Ollama |
+| `EMBED_DIM` | `384` | Local fallback vector dimension |
+| `INDEX_WORKERS` | `2` | Background executor worker count |
+| `MAX_CONTEXT_CHARS` | `10000` | Context bound sent to the LLM |
+| `KNOWLEDGEOS_AUTO_SYNC` | `1` | Queue a startup sync when enabled |
 
-## 9. Troubleshooting
-
-**`ollama_available` is false:** start Ollama and verify `ollama list`. The app remains operational in fallback mode.
-
-**Embedding model changed:** delete `data/knowledgeos.db` and re-index the corpus, or use a migration script before changing `EMBED_MODEL`. Embeddings are model-specific.
-
-**Scanned PDFs return empty text:** the current parser handles text PDFs. Add OCR preprocessing for image-only PDFs in a future ingestion adapter.
-
-**Slow answers:** use `qwen3:4b`, lower `top_k`, keep `MAX_CONTEXT_CHARS` around 8,000–10,000, and avoid running multiple local models simultaneously.
-
-**Do not expose this directly to the Internet:** this single-user local profile has no authentication layer. Bind to `127.0.0.1` as shown unless you add authentication and a reverse proxy.
-
-## 10. Tests
+## 11. Run tests
 
 ```bash
-pytest -q
+.venv/bin/python -m pytest -q
 ```
+
+Use `python -m pytest`, not a globally installed `pytest`, so the project virtual environment is used.
+
+## Troubleshooting
+
+**LM Studio is not connected.** Open LM Studio, load `qwen/qwen3-0.6b`, start the Developer server, then run `curl http://127.0.0.1:1234/v1/models`. If the model ID differs, export `LMSTUDIO_MODEL` to the exact returned ID.
+
+**The terminal client reports an empty LM Studio response.** Make sure the model is loaded, not merely downloaded, and that the server is running at `http://127.0.0.1:1234/v1`.
+
+**`ollama_available` is false.** This is expected when using LM Studio. Ollama is only an optional fallback.
+
+**Embeddings use `local-hash-fallback`.** LM Studio's embedding endpoint or configured embedding model is unavailable. Check `/v1/models`, correct `LMSTUDIO_EMBED_MODEL`, and run `/sync` so chunks are embedded again.
+
+**A PDF produces little text.** The MVP extracts text PDFs with `pypdf`; scanned/image-only PDFs require OCR, which should be added as a separate ingestion adapter.
+
+**Old content appears after editing a file.** Queue a sync and inspect the job. Changed files receive a new `document_versions` row; unchanged files are skipped by SHA-256.
+
+**Responses are slow.** Prefer `qwen3:4b`, reduce `top_k` to 4, keep `MAX_CONTEXT_CHARS` bounded, and avoid running multiple model services simultaneously.
