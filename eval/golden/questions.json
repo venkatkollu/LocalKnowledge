@@ -1,0 +1,10 @@
+[
+  {"id":"cache","question":"What does the URL service use to cache links?","expected_sources":["cache.md"],"answer_terms":["Redis"]},
+  {"id":"ttl","question":"What is the cache expiry?","expected_sources":["cache.md"],"answer_terms":["300"]},
+  {"id":"durable","question":"Where are durable URL records stored?","expected_sources":["cache.md"],"answer_terms":["PostgreSQL"]},
+  {"id":"sessions","question":"What stores chat session data?","expected_sources":["chat.md"],"answer_terms":["Redis"]},
+  {"id":"backups","question":"How many days are backups retained?","expected_sources":["deploy.md"],"answer_terms":["14"]},
+  {"id":"port","question":"Which port serves Ollama local models?","expected_sources":["deploy.md"],"answer_terms":["11434"]},
+  {"id":"acl","question":"Who can read private documents?","expected_sources":["security.md"],"answer_terms":["owner"]},
+  {"id":"method","question":"How does JWTService.validate reject empty tokens?","expected_sources":["auth.py"],"answer_terms":["strip"]}
+]

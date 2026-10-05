@@ -12,6 +12,8 @@ from urllib.parse import urlparse
 import httpx
 import uvicorn
 
+API_HEADERS = {"Authorization": f"Bearer {os.environ['KNOWLEDGEOS_API_TOKEN']}"} if os.getenv("KNOWLEDGEOS_API_TOKEN") else {}
+
 
 def port_open(url: str) -> bool:
     parsed = urlparse(url)
@@ -27,7 +29,7 @@ def wait_for_api(base_url: str, seconds: int = 20) -> dict:
     last_error = "API did not become ready"
     while time.time() < deadline:
         try:
-            response = httpx.get(f"{base_url}/health", timeout=2)
+            response = httpx.get(f"{base_url}/health", headers=API_HEADERS, timeout=2)
             if response.is_success:
                 return response.json()
         except Exception as exc:
@@ -40,14 +42,8 @@ def print_health(health: dict) -> None:
     print("\nKnowledgeOS is ready")
     print(f"  Documents: {health.get('documents', 0)} | Embedded chunks: {health.get('embedded_chunks', 0)}")
     print(f"  LLM provider: {health.get('llm_provider')} | Model: {health.get('lmstudio_model') or health.get('generation_model')}")
-    if health.get("llm_provider") == "lmstudio":
-        if health.get("lmstudio_available"):
-            print(f"  LM Studio: connected at {health.get('lmstudio_url')}")
-        else:
-            print(f"  LM Studio: NOT CONNECTED at {health.get('lmstudio_url')}")
-            print("  Start LM Studio -> Developer -> Start Server, then run this command again.")
-            if health.get("lmstudio_error"):
-                print(f"  Connection detail: {health['lmstudio_error']}")
+    print(f"  Embedding model: {health.get('embedding_model')} | Index: {health.get('index_version')}")
+    print(f"  Authentication: {health.get('auth_mode')} | local models are called when needed")
     print("\nCommands: /sync  /health  /help  /quit")
 
 
@@ -59,7 +55,7 @@ def print_result(data: dict) -> None:
     if data.get("provider_error"):
         print(f"\n[LLM connection warning] {data['provider_error']}")
     print("\n" + "-" * 78)
-    print("RETRIEVAL EVALUATION")
+    print("RETRIEVAL TRACE")
     print("-" * 78)
     stats = data.get("stats", {})
     labels = [("Dense candidates", "dense_candidates"), ("BM25 candidates", "bm25_candidates"), ("RRF candidates", "rrf_candidates"), ("Reranked", "reranked"), ("Final context", "final_context"), ("Retrieval latency", "retrieval_ms"), ("Generation latency", "generation_ms"), ("Total latency", "latency_ms")]
@@ -78,7 +74,7 @@ def wait_for_sync(base_url: str, job_id: str) -> None:
     print(f"Sync job {job_id[:8]} started. Waiting for chunk-level changes…")
     deadline = time.time() + 300
     while time.time() < deadline:
-        status = httpx.get(f"{base_url}/jobs/{job_id}", timeout=10).json()
+        status = httpx.get(f"{base_url}/jobs/{job_id}", headers=API_HEADERS, timeout=10).json()
         if status.get("status") in {"completed", "failed"}:
             print(json.dumps(status.get("summary") or {"status": status.get("status"), "error": status.get("error")}, indent=2))
             return
@@ -115,18 +111,18 @@ def main() -> int:
             if command in {"/quit", "/exit", "quit", "exit"}:
                 break
             if command == "/help":
-                print("Enter a question. /sync queues indexing, /health checks LM Studio, /quit exits.")
+                print("Enter a question. /sync queues indexing, /health checks the service, /quit exits.")
                 continue
             if command == "/health":
-                print_health(httpx.get(f"{base_url}/health", timeout=5).json())
+                print_health(httpx.get(f"{base_url}/health", headers=API_HEADERS, timeout=5).json())
                 continue
             if command == "/sync":
-                response = httpx.post(f"{base_url}/documents/sync", timeout=10)
+                response = httpx.post(f"{base_url}/documents/sync", headers=API_HEADERS, timeout=10)
                 payload = response.json()
                 print(json.dumps(payload, indent=2))
                 wait_for_sync(base_url, payload["job_id"])
                 continue
-            response = httpx.post(f"{base_url}/chat", json={"query": prompt, "top_k": 6}, timeout=240)
+            response = httpx.post(f"{base_url}/chat", headers=API_HEADERS, json={"query": prompt, "top_k": 6}, timeout=240)
             if not response.is_success:
                 print(f"Request failed ({response.status_code}): {response.text}")
                 continue

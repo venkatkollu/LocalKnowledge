@@ -1,10 +1,16 @@
 import os
+import tempfile
 from pathlib import Path
 
+TEMP = tempfile.TemporaryDirectory(prefix="knowledgeos-tests-", dir=os.getenv("KNOWLEDGEOS_TMP"))
+TEST_DATA = Path(TEMP.name) / "data"
+TEST_KNOWLEDGE = Path(TEMP.name) / "knowledge"
+
 os.environ["KNOWLEDGEOS_AUTO_SYNC"] = "0"
-os.environ["KNOWLEDGEOS_DATA"] = "/tmp/knowledgeos-test-data"
-os.environ["KNOWLEDGEOS_KNOWLEDGE"] = "/tmp/knowledgeos-test-knowledge"
-os.environ["KNOWLEDGEOS_DB"] = "/tmp/knowledgeos-test-data/test.db"
+os.environ["KNOWLEDGEOS_OFFLINE"] = "1"
+os.environ["KNOWLEDGEOS_DATA"] = str(TEST_DATA)
+os.environ["KNOWLEDGEOS_KNOWLEDGE"] = str(TEST_KNOWLEDGE)
+os.environ["KNOWLEDGEOS_DB"] = str(TEST_DATA / "test.db")
 
 from fastapi.testclient import TestClient
 import app
@@ -12,10 +18,10 @@ import app
 
 def setup_module():
     import shutil
-    shutil.rmtree("/tmp/knowledgeos-test-data", ignore_errors=True)
-    shutil.rmtree("/tmp/knowledgeos-test-knowledge", ignore_errors=True)
-    Path("/tmp/knowledgeos-test-knowledge").mkdir(parents=True)
-    Path("/tmp/knowledgeos-test-knowledge/note.md").write_text("Redis is used for caching API responses. PostgreSQL stores durable data.")
+    shutil.rmtree(TEST_DATA, ignore_errors=True)
+    shutil.rmtree(TEST_KNOWLEDGE, ignore_errors=True)
+    TEST_KNOWLEDGE.mkdir(parents=True)
+    (TEST_KNOWLEDGE / "note.md").write_text("Redis is used for caching API responses. PostgreSQL stores durable data.")
     app.init_db()
     app.scan()
 

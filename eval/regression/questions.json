@@ -1,0 +1,4 @@
+[
+  {"id":"two-sources","question":"Which services use Redis for caching and session data?","expected_sources":["cache.md","chat.md"],"answer_terms":["Redis"]},
+  {"id":"hash","question":"How does content_hash compute the SHA-256 digest?","expected_sources":["auth.py"],"answer_terms":["sha256"]}
+]
