@@ -23,7 +23,7 @@
     <p>
       <a href="https://github.com/venkatkollu/LocalKnowledge"><img src="https://img.shields.io/badge/🔥Project-Page-4f9361?style=for-the-badge&logo=github&logoColor=white&labelColor=1f2937" alt="Project page"></a>
       <a href="architecture.png"><img src="https://img.shields.io/badge/🧭Architecture-Diagram-456990?style=for-the-badge&logoColor=white&labelColor=1f2937" alt="Architecture diagram"></a>
-      <a href="./docs/screenshotask-knowledge-user.png"><img src="https://img.shields.io/badge/🖥️Live%20UI-Screenshots-7c5aa6?style=for-the-badge&logoColor=white&labelColor=1f2937" alt="UI screenshots"></a>
+      <a href="screenshots/working-query.png"><img src="https://img.shields.io/badge/🖥️Live%20UI-Screenshots-7c5aa6?style=for-the-badge&logoColor=white&labelColor=1f2937" alt="UI screenshots"></a>
     </p>
     <p>
       <img src="https://img.shields.io/badge/⚛️React%20%2B%20Vite-Frontend-646cff?style=for-the-badge&logo=react&logoColor=white&labelColor=1f2937" alt="React and Vite">
@@ -60,8 +60,8 @@
 <div align="center">
 <table>
 <tr>
-<td align="center" width="50%"><strong>Ask Knowledge</strong><br><img src="ask-knowledge-user.png" width="100%" alt="Ask Knowledge interface"></td>
-<td align="center" width="50%"><strong>Workspace dashboard</strong><br><img src="architecture.png" width="100%" alt="Dashboard interface"></td>
+<td align="center" width="50%"><strong>Ask Knowledge</strong><br><img src="screenshots/working-query.png" width="100%" alt="Ask Knowledge interface"></td>
+<td align="center" width="50%"><strong>Workspace dashboard</strong><br><img src="screenshots/dashboard.png" width="100%" alt="Dashboard interface"></td>
 </tr>
 <tr>
 </tr>
@@ -226,7 +226,7 @@ The React/Vite application provides the workspace shell, chat experience, docume
 
 <div align="center">
   <p><strong>Ask Knowledge UI</strong></p>
-  <img src="ask-knowledge-user.png" width="800" alt="Local KnowledgeOS Ask Knowledge UI">
+  <img src="screenshots/working-query.png" width="800" alt="Local KnowledgeOS Ask Knowledge UI">
 </div>
 
 ### Backend
