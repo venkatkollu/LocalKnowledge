@@ -1,7 +1,9 @@
+<link rel="icon" href="Eco Knowledge Network Logo.png" type="image/png">
+
 <div align="center">
 
 <div style="margin: 20px 0;">
-  <img src="./public/logo.svg" width="120" height="120" alt="Local KnowledgeOS logo" style="border-radius: 20px; box-shadow: 0 8px 32px rgba(70, 105, 144, 0.30);">
+  <img src="Eco Knowledge Network Logo.png" width="120" height="120" alt="Eco Knowledge Network Logo" style="border-radius: 20px; box-shadow: 0 8px 32px rgba(70, 105, 144, 0.30);">
 </div>
 
 # 🚀 Local KnowledgeOS: Private, Local-First RAG Workspace
