@@ -46,14 +46,16 @@
 
 ## 🎉 Highlights
 
-- **Local document ingestion** for Markdown, text, PDF, source code, JSON, YAML, CSV, SQL, HTML, CSS, XML, logs, local folders, and shallow HTTPS Git clones.
+- **Local document ingestion** for Markdown, text, PDF, source code, JSON, YAML, CSV, SQL, HTML, CSS, XML, logs, local folders, and shallow HTTPS Git clones. <br><img src="screenshots/doc-ingestion.png" width="200" alt="Document ingestion interface">
 - **Hybrid retrieval** combining SQLite FTS5/BM25, dense cosine similarity, reciprocal-rank fusion, and a local reranking heuristic.
 - **Grounded streaming answers** with citations, evidence-quality metadata, trace IDs, and thumbs-up/down feedback.
-- **Inspectable chunking** with configurable chunk size and overlap, line ranges, token counts, SHA-256 deduplication, and version history.
+- **Inspectable chunking** with configurable chunk size and overlap, line ranges, token counts, SHA-256 deduplication, and version history. <br><img src="screenshots/docs-chunks.png" width="300" alt="Document chunks interface">
 - **Blue-green indexes** that can be created, built, validated, evaluated, activated, and rolled back without interrupting the active revision.
 - **Local embeddings** through Ollama (`all-minilm` by default), with optional OpenAI-compatible embedding or generation profiles.
 - **Evaluation and observability** with Recall@100, nDCG@10, MRR@10, traces, latency percentiles, stage timings, query outcomes, and storage metrics.
+- **Performance** UI <br><img src="screenshots/performance.png" width="300" alt="Performance interface">
 - **Workspace isolation** on every persistent row, optional bearer authentication, encrypted provider keys, and a Docker Compose deployment.
+- **Document ingestion UI** <br><img src="screenshots/doc-ingestion.png" width="200" alt="Document ingestion interface">
 
 ## 🖥️ Product preview
 
@@ -64,6 +66,12 @@
 <td align="center" width="50%"><strong>Workspace dashboard</strong><br><img src="screenshots/dashboard.png" width="100%" alt="Dashboard interface"></td>
 </tr>
 <tr>
+<td align="center" width="50%"><strong>Activity</strong><br><img src="screenshots/activity.png" width="100%" alt="Activity interface"></td>
+<td align="center" width="50%"><strong>Performance</strong><br><img src="screenshots/performance.png" width="100%" alt="Performance interface"></td>
+</tr>
+<tr>
+<td align="center" width="50%"><strong>Sync Queue</strong><br><img src="screenshots/sync-queue.png" width="100%" alt="Sync queue interface"></td>
+<td align="center" width="50%"><strong>Evaluation</strong><br><img src="screenshots/evaluation.png" width="100%" alt="Evaluation interface"></td>
 </tr>
 </table>
 </div>
@@ -214,6 +222,8 @@ KNOWLEDGEOS_OLLAMA_AUTO_PULL=false \
 3. Open **Indexes** to create and build a candidate revision, then validate and activate it.
 4. Ask a question from **Ask Knowledge**. Answers stream with citations and evidence metadata.
 5. Use **Activity**, **Performance**, and **Evaluations** to inspect traces, latency, retrieval quality, and feedback.
+- **Sync queue** to watch content move through parsing, chunking, embedding, indexing, and validation.
+- **Doc ingestion** to add files, a local folder, or a shallow HTTPS Git repository.
 6. Configure local or OpenAI-compatible generation and embedding providers from **Models**.
 
 ## 🏗️ Architecture
