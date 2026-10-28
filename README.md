@@ -64,8 +64,6 @@
 <td align="center" width="50%"><strong>Workspace dashboard</strong><br><img src="architecture.png" width="100%" alt="Dashboard interface"></td>
 </tr>
 <tr>
-<td align="center"><strong>Document ingestion and sync</strong><br><img src="documents.png" width="100%" alt="Documents interface"></td>
-<td align="center"><strong>Blue-green indexes</strong><br><img src="indexes.png" width="100%" alt="Indexes interface"></td>
 </tr>
 </table>
 </div>
