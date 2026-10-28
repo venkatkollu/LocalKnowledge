@@ -91,6 +91,27 @@ The UI is served by nginx and proxies `/api` to the backend inside the Compose
 network. The backend is not published to the host by default. Change the host
 port with `KNOWLEDGEOS_HTTP_PORT` in `.env`.
 
+### Optional GPU acceleration
+
+The default Ollama service runs on CPU. With the NVIDIA Container Toolkit
+installed, enable GPU inference for faster embeddings:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build -d
+```
+
+### Use an existing Ollama installation
+
+To reuse Ollama on the host, remove the `ollama` and `ollama-pull` services from
+Compose (or stop them) and set:
+
+```sh
+KNOWLEDGEOS_OLLAMA_BASE_URL=http://host.docker.internal:11434
+```
+
+On Linux, add `extra_hosts: ["host.docker.internal:host-gateway"]` to the
+backend service if that hostname is unavailable.
+
 ### Docker secrets
 
 The backend container generates a strong auth secret and Fernet encryption key
@@ -400,6 +421,7 @@ src/
 Dockerfile                Multi-stage frontend build + nginx runtime
 backend/Dockerfile        Python API image
 docker-compose.yml        Frontend, backend, Ollama, model bootstrap
+docker-compose.gpu.yml    Optional NVIDIA GPU override for Ollama
 ```
 
 ## Troubleshooting
