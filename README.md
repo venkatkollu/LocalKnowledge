@@ -1,5 +1,3 @@
-<link rel="icon" href="Eco Knowledge Network Logo.png" type="image/png">
-
 <div align="center">
 
 <div style="margin: 20px 0;">
