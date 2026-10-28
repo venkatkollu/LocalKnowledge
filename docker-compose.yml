@@ -1,0 +1,79 @@
+name: local-knowledgeos
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - knowledgeos
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: ollama:11434
+      KNOWLEDGEOS_OLLAMA_EMBEDDING_MODEL: ${KNOWLEDGEOS_OLLAMA_EMBEDDING_MODEL:-all-minilm}
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["ollama pull \"$${KNOWLEDGEOS_OLLAMA_EMBEDDING_MODEL}\""]
+    volumes:
+      - ollama-models:/root/.ollama
+    networks:
+      - knowledgeos
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      ollama-pull:
+        condition: service_completed_successfully
+    environment:
+      KNOWLEDGEOS_DATA_DIR: /data
+      KNOWLEDGEOS_OLLAMA_BASE_URL: http://ollama:11434
+      KNOWLEDGEOS_OLLAMA_EMBEDDING_MODEL: ${KNOWLEDGEOS_OLLAMA_EMBEDDING_MODEL:-all-minilm}
+      KNOWLEDGEOS_ALLOW_HASH_EMBEDDING_FALLBACK: ${KNOWLEDGEOS_ALLOW_HASH_EMBEDDING_FALLBACK:-false}
+      KNOWLEDGEOS_ALLOW_ANONYMOUS: ${KNOWLEDGEOS_ALLOW_ANONYMOUS:-true}
+      KNOWLEDGEOS_CORS_ORIGINS: ${KNOWLEDGEOS_CORS_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      KNOWLEDGEOS_MAX_UPLOAD_BYTES: ${KNOWLEDGEOS_MAX_UPLOAD_BYTES:-536870912}
+      KNOWLEDGEOS_WORKERS: ${KNOWLEDGEOS_WORKERS:-4}
+      KNOWLEDGEOS_AUTH_SECRET: ${KNOWLEDGEOS_AUTH_SECRET:-}
+      KNOWLEDGEOS_ENCRYPTION_KEY: ${KNOWLEDGEOS_ENCRYPTION_KEY:-}
+    volumes:
+      - knowledgeos-data:/data
+    networks:
+      - knowledgeos
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_KNOWLEDGEOS_API_URL: ""
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${KNOWLEDGEOS_HTTP_PORT:-8080}:80"
+    networks:
+      - knowledgeos
+
+volumes:
+  knowledgeos-data:
+  ollama-models:
+
+networks:
+  knowledgeos:
+    driver: bridge

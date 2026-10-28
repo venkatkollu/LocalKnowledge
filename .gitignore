@@ -1,0 +1,30 @@
+# local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.docker.example
+*.pem
+*.key
+secrets/
+.secrets/
+
+# dependencies and build output
+node_modules
+dist
+
+# local data (documents, SQLite database, generated secrets)
+data
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.sqlite3
+*.db
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.log

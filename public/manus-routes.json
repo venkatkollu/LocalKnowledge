@@ -1,0 +1,17 @@
+{
+  "routes": [
+    { "path": "/", "title": "Ask Knowledge" },
+    { "path": "/documents", "title": "Documents" },
+    { "path": "/collections", "title": "Collections" },
+    { "path": "/sync", "title": "Sync Queue" },
+    { "path": "/activity", "title": "Activity" },
+    { "path": "/performance", "title": "Performance" },
+    { "path": "/evaluations", "title": "Evaluations" },
+    { "path": "/models", "title": "Models" },
+    { "path": "/indexes", "title": "Indexes" },
+    { "path": "/settings", "title": "Settings" },
+    { "path": "/storage", "title": "Storage" },
+    { "path": "/auth", "title": "Authentication" },
+    { "path": "/dashboard", "title": "Dashboard" }
+  ]
+}
