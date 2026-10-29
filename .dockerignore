@@ -19,8 +19,6 @@ venv
 
 .env
 .env.*
-!.env.example
-!.env.docker.example
 
 *.sqlite3
 *.db
