@@ -4,10 +4,10 @@ WORKDIR /app
 
 ENV CI=true
 
-COPY package.json package-lock.json ./
+COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
-COPY . .
+COPY frontend/ ./
 
 ARG VITE_KNOWLEDGEOS_API_URL=""
 ENV VITE_KNOWLEDGEOS_API_URL=$VITE_KNOWLEDGEOS_API_URL

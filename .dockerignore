@@ -8,8 +8,8 @@
 .vscode
 .idea
 
-node_modules
-dist
+frontend/node_modules
+frontend/dist
 data
 
 **/__pycache__

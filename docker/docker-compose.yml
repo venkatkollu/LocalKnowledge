@@ -58,7 +58,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: docker/Dockerfile
       args:
         VITE_KNOWLEDGEOS_API_URL: ""
     restart: unless-stopped

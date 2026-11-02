@@ -1,7 +1,7 @@
 <div align="center">
 
 <div style="margin: 20px 0;">
-  <img src="Eco Knowledge Network Logo.png" width="120" height="120" alt="Eco Knowledge Network Logo" style="border-radius: 20px; box-shadow: 0 8px 32px rgba(70, 105, 144, 0.30);">
+  <img src="docs/assets/Eco Knowledge Network Logo.png" width="120" height="120" alt="Eco Knowledge Network Logo" style="border-radius: 20px; box-shadow: 0 8px 32px rgba(70, 105, 144, 0.30);">
 </div>
 
 # 🚀 Local KnowledgeOS: Private, Local-First RAG Workspace
@@ -11,7 +11,7 @@
 </p>
 
 <div align="center" style="margin: 30px 0;">
-  <img src="architecture.png" width="1000" alt="Local KnowledgeOS hand-drawn architecture diagram">
+  <img src="docs/assets/architecture.png" width="1000" alt="Local KnowledgeOS hand-drawn architecture diagram">
 </div>
 
 <div align="center">
@@ -22,8 +22,8 @@
   <div style="background: linear-gradient(135deg, #edf7ef 0%, #eef3f8 100%); border-radius: 15px; padding: 25px; text-align: center;">
     <p>
       <a href="https://github.com/venkatkollu/LocalKnowledge"><img src="https://img.shields.io/badge/🔥Project-Page-4f9361?style=for-the-badge&logo=github&logoColor=white&labelColor=1f2937" alt="Project page"></a>
-      <a href="architecture.png"><img src="https://img.shields.io/badge/🧭Architecture-Diagram-456990?style=for-the-badge&logoColor=white&labelColor=1f2937" alt="Architecture diagram"></a>
-      <a href="screenshots/working-query.png"><img src="https://img.shields.io/badge/🖥️Live%20UI-Screenshots-7c5aa6?style=for-the-badge&logoColor=white&labelColor=1f2937" alt="UI screenshots"></a>
+      <a href="docs/assets/architecture.png"><img src="https://img.shields.io/badge/🧭Architecture-Diagram-456990?style=for-the-badge&logoColor=white&labelColor=1f2937" alt="Architecture diagram"></a>
+      <a href="docs/screenshots/working-query.png"><img src="https://img.shields.io/badge/🖥️Live%20UI-Screenshots-7c5aa6?style=for-the-badge&logoColor=white&labelColor=1f2937" alt="UI screenshots"></a>
     </p>
     <p>
       <img src="https://img.shields.io/badge/⚛️React%20%2B%20Vite-Frontend-646cff?style=for-the-badge&logo=react&logoColor=white&labelColor=1f2937" alt="React and Vite">
@@ -46,32 +46,32 @@
 
 ## 🎉 Highlights
 
-- **Local document ingestion** for Markdown, text, PDF, source code, JSON, YAML, CSV, SQL, HTML, CSS, XML, logs, local folders, and shallow HTTPS Git clones. <br><img src="screenshots/doc-ingestion.png" width="200" alt="Document ingestion interface">
+- **Local document ingestion** for Markdown, text, PDF, source code, JSON, YAML, CSV, SQL, HTML, CSS, XML, logs, local folders, and shallow HTTPS Git clones. <br><img src="docs/screenshots/doc-ingestion.png" width="200" alt="Document ingestion interface">
 - **Hybrid retrieval** combining SQLite FTS5/BM25, dense cosine similarity, reciprocal-rank fusion, and a local reranking heuristic.
 - **Grounded streaming answers** with citations, evidence-quality metadata, trace IDs, and thumbs-up/down feedback.
-- **Inspectable chunking** with configurable chunk size and overlap, line ranges, token counts, SHA-256 deduplication, and version history. <br><img src="screenshots/docs-chunks.png" width="300" alt="Document chunks interface">
+- **Inspectable chunking** with configurable chunk size and overlap, line ranges, token counts, SHA-256 deduplication, and version history. <br><img src="docs/screenshots/docs-chunks.png" width="300" alt="Document chunks interface">
 - **Blue-green indexes** that can be created, built, validated, evaluated, activated, and rolled back without interrupting the active revision.
 - **Local embeddings** through Ollama (`all-minilm` by default), with optional OpenAI-compatible embedding or generation profiles.
 - **Evaluation and observability** with Recall@100, nDCG@10, MRR@10, traces, latency percentiles, stage timings, query outcomes, and storage metrics.
-- **Performance** UI <br><img src="screenshots/performance.png" width="300" alt="Performance interface">
+- **Performance** UI <br><img src="docs/screenshots/performance.png" width="300" alt="Performance interface">
 - **Workspace isolation** on every persistent row, optional bearer authentication, encrypted provider keys, and a Docker Compose deployment.
-- **Document ingestion UI** <br><img src="screenshots/doc-ingestion.png" width="200" alt="Document ingestion interface">
+- **Document ingestion UI** <br><img src="docs/screenshots/doc-ingestion.png" width="200" alt="Document ingestion interface">
 
 ## 🖥️ Product preview
 
 <div align="center">
 <table>
 <tr>
-<td align="center" width="50%"><strong>Ask Knowledge</strong><br><img src="screenshots/working-query.png" width="100%" alt="Ask Knowledge interface"></td>
-<td align="center" width="50%"><strong>Workspace dashboard</strong><br><img src="screenshots/dashboard.png" width="100%" alt="Dashboard interface"></td>
+<td align="center" width="50%"><strong>Ask Knowledge</strong><br><img src="docs/screenshots/working-query.png" width="100%" alt="Ask Knowledge interface"></td>
+<td align="center" width="50%"><strong>Workspace dashboard</strong><br><img src="docs/screenshots/dashboard.png" width="100%" alt="Dashboard interface"></td>
 </tr>
 <tr>
-<td align="center" width="50%"><strong>Activity</strong><br><img src="screenshots/activity.png" width="100%" alt="Activity interface"></td>
-<td align="center" width="50%"><strong>Performance</strong><br><img src="screenshots/performance.png" width="100%" alt="Performance interface"></td>
+<td align="center" width="50%"><strong>Activity</strong><br><img src="docs/screenshots/activity.png" width="100%" alt="Activity interface"></td>
+<td align="center" width="50%"><strong>Performance</strong><br><img src="docs/screenshots/performance.png" width="100%" alt="Performance interface"></td>
 </tr>
 <tr>
-<td align="center" width="50%"><strong>Sync Queue</strong><br><img src="screenshots/sync-queue.png" width="100%" alt="Sync queue interface"></td>
-<td align="center" width="50%"><strong>Evaluation</strong><br><img src="screenshots/evaluation.png" width="100%" alt="Evaluation interface"></td>
+<td align="center" width="50%"><strong>Sync Queue</strong><br><img src="docs/screenshots/sync-queue.png" width="100%" alt="Sync queue interface"></td>
+<td align="center" width="50%"><strong>Evaluation</strong><br><img src="docs/screenshots/evaluation.png" width="100%" alt="Evaluation interface"></td>
 </tr>
 </table>
 </div>
@@ -160,7 +160,7 @@ Requirements: Docker Engine with the Compose plugin.
 
 ```bash
 cp .env.docker.example .env
-docker compose up --build -d
+docker compose -f docker/docker-compose.yml up --build -d
 ```
 
 Open [http://localhost:8080](http://localhost:8080). The first start pulls the configured embedding model into the `ollama-models` volume.
@@ -182,7 +182,7 @@ docker compose down -v
 For NVIDIA GPU inference:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build -d
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml up --build -d
 ```
 
 ### Local development
@@ -198,6 +198,7 @@ sh backend/setup_ollama.sh
 ./backend/run.sh
 
 # Terminal 2 — frontend
+cd frontend
 npm install
 npm run dev
 ```
@@ -236,7 +237,7 @@ The React/Vite application provides the workspace shell, chat experience, docume
 
 <div align="center">
   <p><strong>Ask Knowledge UI</strong></p>
-  <img src="screenshots/working-query.png" width="800" alt="Local KnowledgeOS Ask Knowledge UI">
+  <img src="docs/screenshots/working-query.png" width="800" alt="Local KnowledgeOS Ask Knowledge UI">
 </div>
 
 ### Backend
@@ -272,26 +273,34 @@ See [`.env.example`](./.env.example) and [`.env.docker.example`](./.env.docker.e
 │   ├── main.py                 # FastAPI app and local RAG engine
 │   ├── requirements.txt        # Python dependencies
 │   └── run.sh                  # Backend launcher
-├── src/
-│   ├── api/                    # Typed API clients and domain types
-│   ├── components/             # Chat, documents, indexes, shell, and UI primitives
-│   ├── pages/                  # Workspace routes
-│   └── hooks/                  # Health, documents, auth, and telemetry
+├── frontend/
+│   ├── src/
+│   │   ├── api/                    # Typed API clients and domain types
+│   │   ├── components/             # Chat, documents, indexes, shell, and UI primitives
+│   │   ├── pages/                  # Workspace routes
+│   │   └── hooks/                  # Health, documents, auth, and telemetry
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── vite.config.ts
 ├── docs/
 │   ├── architecture.mmd       # Editable text-based architecture reference
-│   ├── architecture.png       # Primary hand-drawn architecture visual
+│   ├── assets/
+│   │   ├── architecture.png       # Primary hand-drawn architecture visual
+│   │   └── Eco Knowledge Network Logo.png
 │   └── screenshots/            # Runtime UI screenshots
-├── docker-compose.yml          # CPU Compose stack
-└── docker-compose.gpu.yml      # Optional NVIDIA GPU override
+├── docker/
+│   ├── Dockerfile              # Frontend build (multi-stage)
+│   ├── docker-compose.yml      # CPU Compose stack
+│   └── docker-compose.gpu.yml  # Optional NVIDIA GPU override
+└── .dockerignore
 ```
 
 ## 🧪 Development checks
 
 ```bash
-npm run build
-npm run lint
-python3 -m py_compile backend/main.py
-python3 backend/check_dependencies.py
+cd frontend && npm run build && npm run lint
+cd ../backend && python3 -m py_compile main.py
+python3 check_dependencies.py
 ```
 
 The production frontend build passes. ESLint currently reports only existing React Fast Refresh export warnings in shared UI modules; there are no lint errors.
