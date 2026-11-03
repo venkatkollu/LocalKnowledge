@@ -1,28 +1,79 @@
 # local environment and secrets
 .env
 .env.*
+!.env.example
+!.env.docker.example
 *.pem
 *.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+id_ecdsa*
+*.ppk
+.envrc
+.direnv/
 secrets/
 .secrets/
+.auth_secret
+.encryption_key
 
 # dependencies and build output
 node_modules
 dist
+*.tsbuildinfo
 
 # local data (documents, SQLite database, generated secrets)
-data
+/data/
+*.sqlite3
+*.db
+*.sqlite3-*
+*.db-*
+
+# backup and dump files
+*.bak
+*.backup
+*.orig
+*.dump
+backups/
+backup/
 
 # python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
-*.sqlite3
-*.db
+*.egg-info/
+.eggs/
+
+# python caches and test artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage/
+
+# frontend caches and test artifacts
+.vite/
+playwright-report/
+test-results/
+
+# large model weights (keep out of git)
+*.gguf
+*.safetensors
+*.onnx
 
 # editor / OS
 .DS_Store
+Thumbs.db
 .idea/
 .vscode/
 *.log
+*.swp
+*.swo

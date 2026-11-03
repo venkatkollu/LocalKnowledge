@@ -257,11 +257,13 @@ SQLite runs in WAL mode and stores metadata, jobs, chunks, FTS5 records, vectors
 | `KNOWLEDGEOS_OLLAMA_EMBEDDING_MODEL` | `all-minilm` | Local embedding model |
 | `KNOWLEDGEOS_WORKERS` | `4` | Ingestion thread-pool size |
 | `KNOWLEDGEOS_ALLOW_ANONYMOUS` | `true` | Allow local requests without bearer auth |
-| `KNOWLEDGEOS_AUTH_SECRET` | local development secret | HMAC key for bearer tokens |
-| `KNOWLEDGEOS_ENCRYPTION_KEY` | derived from auth secret | Fernet key for provider API keys |
+| `KNOWLEDGEOS_AUTH_SECRET` | generated at `data/.auth_secret` | HMAC key for bearer tokens |
+| `KNOWLEDGEOS_ENCRYPTION_KEY` | generated at `data/.encryption_key` | Fernet key for provider API keys |
 | `KNOWLEDGEOS_CHUNK_SIZE` | `1200` | Target chunk size in characters |
 | `KNOWLEDGEOS_CHUNK_OVERLAP` | `180` | Overlap between adjacent chunks |
 | `VITE_KNOWLEDGEOS_API_URL` | empty | Optional frontend API origin |
+
+Both secrets also accept `KNOWLEDGEOS_AUTH_SECRET_FILE` and `KNOWLEDGEOS_ENCRYPTION_KEY_FILE` for Docker or Kubernetes secret mounts. On first run, the backend generates random persistent values under `data/` with mode `600`; `data/` itself is mode `700`. Existing provider keys that were encrypted with the older key derived from the auth secret are re-encrypted automatically on startup after a private database snapshot is written to `data/backups/`. The snapshot's provider tokens are rewritten with the dedicated key as well.
 
 See [`.env.example`](./.env.example) and [`.env.docker.example`](./.env.docker.example) for the full configuration surface.
 
@@ -298,17 +300,21 @@ See [`.env.example`](./.env.example) and [`.env.docker.example`](./.env.docker.e
 ## 🧪 Development checks
 
 ```bash
+python3 -m pip install -r backend/requirements-dev.txt
+
 cd frontend && npm run build && npm run lint
 cd ../backend && python3 -m py_compile main.py
-python3 check_dependencies.py
+cd .. && python3 -m unittest discover -s backend/tests -v
 ```
 
-The production frontend build passes. ESLint currently reports only existing React Fast Refresh export warnings in shared UI modules; there are no lint errors.
+The production frontend build and the backend secret-lifecycle tests pass. ESLint currently reports only existing React Fast Refresh export warnings in shared UI modules; there are no lint errors.
 
 ## 🔒 Security notes
 
-- Set `KNOWLEDGEOS_ALLOW_ANONYMOUS=false` and a strong `KNOWLEDGEOS_AUTH_SECRET` outside local development.
-- Set and back up an explicit `KNOWLEDGEOS_ENCRYPTION_KEY`; changing it makes stored provider keys undecryptable.
+- On first run without explicit variables, the backend generates random persistent secrets in `data/.auth_secret` and `data/.encryption_key` (mode `600`). Back them up with the database; losing the encryption key makes stored provider keys unrecoverable.
+- Set `KNOWLEDGEOS_ALLOW_ANONYMOUS=false` and a strong `KNOWLEDGEOS_AUTH_SECRET` outside local development. The backend refuses to start with the known development default when anonymous access is disabled.
+- Set and back up an explicit `KNOWLEDGEOS_ENCRYPTION_KEY` if you manage secrets centrally. Changing it makes existing provider keys undecryptable.
+- Provider keys encrypted by older builds with the auth-secret-derived key are migrated on startup. A snapshot is written to `data/backups/` before re-encryption, and keys that cannot be decrypted are reported instead of being silently replaced.
 - Keep the API behind TLS and a private network when exposing the UI beyond localhost.
 - Restrict `KNOWLEDGEOS_CORS_ORIGINS` to the real frontend origin.
 - Do not commit `.env`, `data/`, SQLite files, generated secrets, or provider keys.

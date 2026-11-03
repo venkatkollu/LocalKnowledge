@@ -1,0 +1,3 @@
+-r requirements.txt
+# TestClient dependency for the backend test suite.
+httpx>=0.27,<1
