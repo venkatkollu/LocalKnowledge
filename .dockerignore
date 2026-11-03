@@ -2,7 +2,7 @@
 .gitignore
 .gitattributes
 .github
-.local
+IMPLEMENTATION_PLAN.md
 AGENTS.md
 .agents
 .aws
