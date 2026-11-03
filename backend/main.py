@@ -23,6 +23,7 @@ import shutil
 import sqlite3
 import statistics
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -32,7 +33,7 @@ from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, AsyncIterator, Iterator
+from typing import Any, AsyncIterator, Callable, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from urllib.parse import urlparse
@@ -69,6 +70,14 @@ LOCAL_BGE_MODEL = os.getenv("KNOWLEDGEOS_LOCAL_BGE_MODEL", "BAAI/bge-small-en-v1
 LOCAL_BGE_AUTO_LOAD = os.getenv("KNOWLEDGEOS_LOCAL_BGE_AUTO_LOAD", "true").lower() in {"1", "true", "yes"}
 ALLOW_HASH_EMBEDDING_FALLBACK = os.getenv("KNOWLEDGEOS_ALLOW_HASH_EMBEDDING_FALLBACK", "false").lower() in {"1", "true", "yes"}
 INGEST_EXTENSIONS = {"pdf", "md", "txt", "py", "js", "ts", "tsx", "jsx", "json", "yaml", "yml", "csv", "sql", "go", "rs", "html", "css", "xml", "log"}
+LEGACY_AUTH_SECRET = "local-development-secret"
+PRIVATE_DIR_MODE = 0o700
+PRIVATE_FILE_MODE = 0o600
+PROTECTED_DATA_DIRS = {
+    Path("/"), Path("/tmp"), Path("/var"), Path("/etc"), Path("/usr"),
+    Path("/home"), Path("/root"), Path("/opt"), Path("/srv"), Path("/mnt"),
+    Path("/media"), Path("/boot"), Path("/dev"), Path("/proc"), Path("/sys"),
+}
 
 
 def now_ms() -> int:
@@ -85,19 +94,78 @@ def json_dumps(value: Any) -> str:
     return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
 
 
-def secret_env(name: str, default: str = "") -> str:
-    """Read a secret from NAME_FILE (Docker/K8s secret) or NAME.
+def set_private_mode(path: Path, mode: int) -> bool:
+    """Best-effort chmod; failures are reported by callers that require privacy."""
+    try:
+        path.chmod(mode)
+        return True
+    except OSError:
+        return False
 
-    File-based secrets avoid exposing credentials in the process environment
-    and container inspection output. Explicit environment variables win.
+
+def ensure_private_dir(path: Path, harden: bool = True) -> None:
+    path.mkdir(parents=True, exist_ok=True, mode=PRIVATE_DIR_MODE)
+    if harden and not set_private_mode(path, PRIVATE_DIR_MODE):
+        print(f"WARNING: could not restrict permissions on {path}", file=sys.stderr)
+
+
+def read_secret_file(path: Path) -> str:
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise RuntimeError(f"Secret file is not readable: {path}") from exc
+    if not value:
+        raise RuntimeError(f"Secret file is empty: {path}")
+    return value
+
+
+def write_secret_file(path: Path, value: str, harden_parent: bool = True) -> None:
+    if harden_parent:
+        ensure_private_dir(path.parent)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, PRIVATE_FILE_MODE)
+    except FileExistsError:
+        return
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(value)
+            handle.flush()
+            os.fsync(handle.fileno())
+        set_private_mode(path, PRIVATE_FILE_MODE)
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+
+
+def load_or_create_secret(name: str, default_path: Path, generator: Callable[[], str]) -> str:
+    """Resolve NAME or NAME_FILE, otherwise create a persistent private secret.
+
+    Explicit environment variables win over files. A configured *_FILE path is
+    created with mode 600 when missing so containers and service managers can
+    mount a stable path without shipping a secret in the image.
     """
-    file_path = os.getenv(f"{name}_FILE", "").strip()
-    if file_path:
-        try:
-            return Path(file_path).read_text(encoding="utf-8").strip()
-        except OSError:
-            pass
-    return os.getenv(name, default)
+    value = os.getenv(name, "").strip()
+    if value:
+        return value
+    configured_file = os.getenv(f"{name}_FILE", "").strip()
+    path = Path(configured_file).expanduser() if configured_file else default_path
+    if path.exists():
+        if path.stat().st_size == 0:
+            if configured_file:
+                raise RuntimeError(f"Secret file is empty: {path}")
+            path.unlink(missing_ok=True)
+        else:
+            return read_secret_file(path)
+    write_secret_file(path, generator(), harden_parent=not configured_file)
+    print(f"Generated persistent secret at {path} with mode 600", file=sys.stderr)
+    return read_secret_file(path)
+
+
+def legacy_encryption_key(auth_secret: bytes) -> bytes:
+    """Reproduce the pre-0.1 key derivation so existing provider keys migrate."""
+    return base64.urlsafe_b64encode(hashlib.sha256(auth_secret + b"/provider-keys").digest())
 
 
 def safe_filename(name: str) -> str:
@@ -196,11 +264,19 @@ def understand_query(question: str) -> tuple[list[str], str]:
 
 class Settings:
     def __init__(self) -> None:
-        self.data_dir = Path(os.getenv("KNOWLEDGEOS_DATA_DIR", "data"))
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.data_dir = Path(os.getenv("KNOWLEDGEOS_DATA_DIR", "data")).expanduser()
+        resolved_data_dir = self.data_dir.resolve()
+        if resolved_data_dir in PROTECTED_DATA_DIRS or resolved_data_dir in {Path.home().resolve(), Path.cwd().resolve()}:
+            raise RuntimeError("KNOWLEDGEOS_DATA_DIR must point to a dedicated data directory, not a system directory or the project root")
+        ensure_private_dir(self.data_dir)
         self.db_path = self.data_dir / "knowledgeos.sqlite3"
         self.files_dir = self.data_dir / "files"
-        self.files_dir.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(self.files_dir)
+        for child in self.files_dir.iterdir():
+            if child.is_dir() and not child.is_symlink():
+                set_private_mode(child, PRIVATE_DIR_MODE)
+        if self.db_path.exists():
+            set_private_mode(self.db_path, PRIVATE_FILE_MODE)
         self.max_upload_bytes = MAX_UPLOAD_BYTES
         self.ollama_base_url = OLLAMA_BASE_URL
         self.ollama_embedding_model = OLLAMA_EMBEDDING_MODEL
@@ -217,15 +293,33 @@ class Settings:
         self.local_bge_auto_load = LOCAL_BGE_AUTO_LOAD
         self.allow_hash_embedding_fallback = ALLOW_HASH_EMBEDDING_FALLBACK
         self.allow_anonymous = os.getenv("KNOWLEDGEOS_ALLOW_ANONYMOUS", "true").lower() in {"1", "true", "yes"}
-        self.auth_secret = secret_env("KNOWLEDGEOS_AUTH_SECRET", "local-development-secret").encode()
+        auth_secret_value = load_or_create_secret(
+            "KNOWLEDGEOS_AUTH_SECRET",
+            self.data_dir / ".auth_secret",
+            lambda: secrets.token_hex(32),
+        )
+        self.auth_secret = auth_secret_value.encode()
+        if auth_secret_value == LEGACY_AUTH_SECRET:
+            message = "KNOWLEDGEOS_AUTH_SECRET is set to the known development default; set a strong unique value before exposing this instance"
+            if not self.allow_anonymous:
+                raise RuntimeError(message)
+            print(f"WARNING: {message}", file=sys.stderr)
         if not self.allow_anonymous and len(self.auth_secret) < 16:
             raise RuntimeError("Set a strong KNOWLEDGEOS_AUTH_SECRET (at least 16 characters) when anonymous access is disabled")
-        configured_key = secret_env("KNOWLEDGEOS_ENCRYPTION_KEY")
-        if configured_key:
-            self.encryption_key = configured_key.encode()
-        else:
-            self.encryption_key = base64.urlsafe_b64encode(hashlib.sha256(self.auth_secret + b"/provider-keys").digest())
-        self.fernet = Fernet(self.encryption_key)
+        encryption_key_value = load_or_create_secret(
+            "KNOWLEDGEOS_ENCRYPTION_KEY",
+            self.data_dir / ".encryption_key",
+            lambda: Fernet.generate_key().decode(),
+        )
+        self.encryption_key = encryption_key_value.encode()
+        try:
+            self.fernet = Fernet(self.encryption_key)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError("KNOWLEDGEOS_ENCRYPTION_KEY must be a valid Fernet key (44 url-safe base64 characters)") from exc
+        self.legacy_fernets = [
+            Fernet(legacy_encryption_key(value))
+            for value in dict.fromkeys((self.auth_secret, LEGACY_AUTH_SECRET.encode()))
+        ]
 
 
 SETTINGS = Settings()
@@ -333,10 +427,90 @@ def db() -> Iterator[sqlite3.Connection]:
             connection.close()
 
 
+def backup_database(connection: sqlite3.Connection, reason: str) -> Path:
+    """Create a consistent, private SQLite snapshot before key migration."""
+    backup_dir = SETTINGS.data_dir / "backups"
+    ensure_private_dir(backup_dir)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    path = backup_dir / f"knowledgeos-{reason}-{stamp}.sqlite3"
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, PRIVATE_FILE_MODE)
+    os.close(descriptor)
+    destination = sqlite3.connect(path)
+    try:
+        connection.backup(destination)
+    finally:
+        destination.close()
+    set_private_mode(path, PRIVATE_FILE_MODE)
+    return path
+
+
+def migrate_provider_keys(connection: sqlite3.Connection) -> tuple[int, int]:
+    """Move provider keys from the legacy derived key to the dedicated key.
+
+    Older builds encrypted provider keys with a key derived from the auth
+    secret, which defaulted to a public constant. Rows that still decrypt with
+    that legacy key are re-encrypted with the current Fernet key after a
+    verified snapshot. Unknown keys are left untouched and reported.
+    """
+    rows = connection.execute("SELECT id, encrypted_key FROM provider_profiles").fetchall()
+    pending: list[tuple[str, str]] = []
+    failed = 0
+    for row in rows:
+        token = row["encrypted_key"].encode()
+        try:
+            SETTINGS.fernet.decrypt(token)
+            continue
+        except (InvalidToken, TypeError, ValueError):
+            pass
+        plaintext: str | None = None
+        for legacy in SETTINGS.legacy_fernets:
+            try:
+                plaintext = legacy.decrypt(token).decode("utf-8")
+                break
+            except (InvalidToken, TypeError, ValueError, UnicodeDecodeError):
+                continue
+        if plaintext is None:
+            failed += 1
+            continue
+        pending.append((row["id"], SETTINGS.fernet.encrypt(plaintext.encode()).decode()))
+    if pending:
+        backup_path = backup_database(connection, "pre-key-migration")
+        replacements = [(new_token, provider_id) for provider_id, new_token in pending]
+        connection.executemany("UPDATE provider_profiles SET encrypted_key=? WHERE id=?", replacements)
+        # The snapshot is private, but its tokens were still encrypted with the
+        # legacy key. Rewrite them so a stolen backup cannot expose provider keys.
+        try:
+            backup_connection = sqlite3.connect(backup_path)
+            try:
+                backup_connection.executemany("UPDATE provider_profiles SET encrypted_key=? WHERE id=?", replacements)
+                backup_connection.commit()
+            finally:
+                backup_connection.close()
+        except sqlite3.Error as exc:
+            print(f"WARNING: could not re-encrypt provider keys in backup {backup_path}: {exc}", file=sys.stderr)
+        print(
+            f"Re-encrypted {len(pending)} provider key(s) with the dedicated encryption key; backup at {backup_path}",
+            file=sys.stderr,
+        )
+    if failed:
+        print(
+            f"WARNING: {failed} provider key(s) could not be decrypted with the configured or legacy keys; re-enter them in Models",
+            file=sys.stderr,
+        )
+    return len(pending), failed
+
+
 def init_db() -> None:
     with DB_LOCK, db() as connection:
         connection.executescript(SCHEMA)
         connection.execute("INSERT OR IGNORE INTO workspaces(id, name, created_at) VALUES (?, ?, ?)", ("default", "Default workspace", now_ms()))
+        connection.commit()
+        migrate_provider_keys(connection)
+    set_private_mode(SETTINGS.db_path, PRIVATE_FILE_MODE)
+    for suffix in ("-wal", "-shm"):
+        sidecar = Path(f"{SETTINGS.db_path}{suffix}")
+        if sidecar.exists():
+            set_private_mode(sidecar, PRIVATE_FILE_MODE)
 
 
 @asynccontextmanager
@@ -738,11 +912,12 @@ def test_provider(provider_id: str, p: Principal = Depends(principal)) -> dict[s
 
 def save_upload(upload: UploadFile, workspace_id: str) -> tuple[Path, int, str]:
     target_dir = SETTINGS.files_dir / workspace_id
-    target_dir.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(target_dir)
     target = target_dir / f"{uuid.uuid4()}-{safe_filename(upload.filename or 'upload')}"
     digest = hashlib.sha256()
     total = 0
     with target.open("wb") as handle:
+        set_private_mode(target, PRIVATE_FILE_MODE)
         while True:
             block = upload.file.read(1024 * 1024)
             if not block:
@@ -759,12 +934,13 @@ def save_upload(upload: UploadFile, workspace_id: str) -> tuple[Path, int, str]:
 def save_local_file(source: Path, workspace_id: str) -> tuple[Path, int, str]:
     """Copy a local source into workspace storage while hashing it in one pass."""
     target_dir = SETTINGS.files_dir / workspace_id
-    target_dir.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(target_dir)
     target = target_dir / f"{uuid.uuid4()}-{safe_filename(source.name)}"
     digest = hashlib.sha256()
     total = 0
     try:
         with source.open("rb") as source_handle, target.open("wb") as target_handle:
+            set_private_mode(target, PRIVATE_FILE_MODE)
             for block in iter(lambda: source_handle.read(1024 * 1024), b""):
                 total += len(block)
                 if total > SETTINGS.max_upload_bytes:

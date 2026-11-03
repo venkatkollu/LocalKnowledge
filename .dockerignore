@@ -2,6 +2,8 @@
 .gitignore
 .gitattributes
 .github
+.local
+AGENTS.md
 .agents
 .aws
 .codex
@@ -27,6 +29,8 @@ venv
 *.key
 secrets
 .secrets
+.auth_secret
+.encryption_key
 
 README.md
 TODO.md
