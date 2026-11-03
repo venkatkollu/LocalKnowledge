@@ -25,6 +25,9 @@ node_modules
 dist
 *.tsbuildinfo
 
+# private implementation plan (local only, never commit)
+/IMPLEMENTATION_PLAN.md
+
 # local data (documents, SQLite database, generated secrets)
 /data/
 *.sqlite3
