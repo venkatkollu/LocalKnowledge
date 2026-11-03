@@ -28,6 +28,9 @@ dist
 # private implementation plan (local only, never commit)
 /IMPLEMENTATION_PLAN.md
 
+# private roadmap (local only, never commit)
+/TODO.md
+
 # local data (documents, SQLite database, generated secrets)
 /data/
 *.sqlite3
