@@ -47,10 +47,11 @@
 ## 🎉 Highlights
 
 - **Local document ingestion** for Markdown, text, PDF, source code, JSON, YAML, CSV, SQL, HTML, CSS, XML, logs, local folders, and shallow HTTPS Git clones. <br><img src="docs/screenshots/doc-ingestion.png" width="200" alt="Document ingestion interface">
-- **Hybrid retrieval** combining SQLite FTS5/BM25, dense cosine similarity, reciprocal-rank fusion, and a local reranking heuristic.
-- **Grounded streaming answers** with citations, evidence-quality metadata, trace IDs, and thumbs-up/down feedback.
+- **Hybrid retrieval** combining SQLite FTS5/BM25, dense cosine similarity, reciprocal-rank fusion, and a local reranking heuristic. Retrieval is scoped to the active index and to document/filename/extension filters before scoring.
+- **Grounded streaming answers** with citations, evidence-quality metadata, trace IDs, and thumbs-up/down feedback. Answers are split into claims and verified against their citations; citations are marked verified or unverified.
+- **Prompt-injection guard** that redacts instruction-like markers from retrieved evidence and wraps it in `<evidence>` delimiters before the provider request.
 - **Inspectable chunking** with configurable chunk size and overlap, line ranges, token counts, SHA-256 deduplication, and version history. <br><img src="docs/screenshots/docs-chunks.png" width="300" alt="Document chunks interface">
-- **Blue-green indexes** that can be created, built, validated, evaluated, activated, and rolled back without interrupting the active revision.
+- **Blue-green indexes** that can be created, built, validated, evaluated, activated, and rolled back without interrupting the active revision. Builds materialize per-index membership and embeddings; the active index tracks the live corpus so new documents stay searchable without mixing embedding spaces.
 - **Local embeddings** through Ollama (`all-minilm` by default), with optional OpenAI-compatible embedding or generation profiles.
 - **Evaluation and observability** with Recall@100, nDCG@10, MRR@10, traces, latency percentiles, stage timings, query outcomes, and storage metrics.
 - **Performance** UI <br><img src="docs/screenshots/performance.png" width="300" alt="Performance interface">
@@ -78,10 +79,12 @@
 
 ## 📰 Project status
 
-- **Current:** Local-first ingestion, hybrid retrieval, streaming answers, workspace-scoped storage, and index lifecycle management are implemented.
+- **Current:** Local-first ingestion, hybrid retrieval, streaming answers, workspace-scoped storage, and index lifecycle management are implemented. Retrieval is scoped to the active index, cache keys include index, filters, intent, top_k, generation model and embedding space, and answers are claim-verified against their citations.
 - **Runtime:** The frontend builds successfully with Vite; the FastAPI health endpoint reports SQLite/FTS5 availability and the configured embedding provider.
 - **Embedding modes:** Ollama is the default path. A deterministic hash fallback is available only for isolated offline smoke tests.
 - **Deployment:** Docker Compose includes the web UI, API, and Ollama model service, with an optional NVIDIA GPU override.
+- **Cache:** Exact composite cache hits are always on. Near-duplicate semantic reuse is opt-in via `KNOWLEDGEOS_CACHE_SEMANTIC_ENABLED=true`.
+- **Verification:** Claim-level NLI verification uses `sentence-transformers` when installed, otherwise a deterministic lexical entailment fallback. Disable with `KNOWLEDGEOS_NLI_ENABLED=false`.
 
 <details>
   <summary><strong>🔄 Ingestion flow</strong></summary>
@@ -118,10 +121,11 @@ flowchart LR
   RR --> EG{Evidence gate}
   EG -- insufficient --> AB[Abstain safely]
   EG -- sufficient --> GEN[Generate grounded answer]
-  GEN --> A
+  GEN --> V[Verify claims\nagainst citations]
+  V --> A
 ```
 
-The evidence gate can abstain when retrieved context is too weak. Successful answers stream citations and persist trace metadata for inspection and feedback.
+The evidence gate can abstain when retrieved context is too weak. Answers are split into claims and verified against their citations; unsupported answers are downgraded to uncertain. Successful answers stream citations and persist trace metadata for inspection and feedback.
 
 </details>
 
@@ -261,7 +265,19 @@ SQLite runs in WAL mode and stores metadata, jobs, chunks, FTS5 records, vectors
 | `KNOWLEDGEOS_ENCRYPTION_KEY` | generated at `data/.encryption_key` | Fernet key for provider API keys |
 | `KNOWLEDGEOS_CHUNK_SIZE` | `1200` | Target chunk size in characters |
 | `KNOWLEDGEOS_CHUNK_OVERLAP` | `180` | Overlap between adjacent chunks |
+| `KNOWLEDGEOS_CACHE_TTL_SECONDS` | `604800` | Exact-cache answer lifetime |
+| `KNOWLEDGEOS_CACHE_SEMANTIC_ENABLED` | `false` | Near-duplicate cache reuse |
+| `KNOWLEDGEOS_CACHE_SIMILARITY` | `0.92` | Semantic cache similarity threshold |
+| `KNOWLEDGEOS_CACHE_DISABLED_DURING_EVAL` | `true` | Disable cache during golden-set runs |
+| `KNOWLEDGEOS_NLI_ENABLED` | `true` | Claim-level citation verification |
+| `KNOWLEDGEOS_NLI_THRESHOLD` | `0.5` | Entailment threshold for a supported claim |
+| `KNOWLEDGEOS_NLI_MODEL` | `cross-encoder/nli-deberta-v3-small` | NLI cross-encoder model |
+| `KNOWLEDGEOS_PROMPT_INJECTION_GUARD` | `true` | Redact instruction-like markers in evidence |
+| `KNOWLEDGEOS_MAX_UPLOAD_BYTES` | `536870912` | Single-upload size limit |
+| `KNOWLEDGEOS_MAX_EXTRACTED_BYTES` | `67108864` | Bytes read from a document before chunking |
+| `KNOWLEDGEOS_DENSE_SCAN_LIMIT` | `50000` | Max chunks scanned for cosine similarity |
 | `VITE_KNOWLEDGEOS_API_URL` | empty | Optional frontend API origin |
+| `GET /v1/models` | — | OpenAI-compatible model list (returns configured generation model) |
 
 Both secrets also accept `KNOWLEDGEOS_AUTH_SECRET_FILE` and `KNOWLEDGEOS_ENCRYPTION_KEY_FILE` for Docker or Kubernetes secret mounts. On first run, the backend generates random persistent values under `data/` with mode `600`; `data/` itself is mode `700`. Existing provider keys that were encrypted with the older key derived from the auth secret are re-encrypted automatically on startup after a private database snapshot is written to `data/backups/`. The snapshot's provider tokens are rewritten with the dedicated key as well.
 
