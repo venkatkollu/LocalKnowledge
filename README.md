@@ -46,11 +46,11 @@
 
 ## 🎉 Highlights
 
-- **Local document ingestion** for Markdown, text, PDF, source code, JSON, YAML, CSV, SQL, HTML, CSS, XML, logs, local folders, and shallow HTTPS Git clones. <br><img src="docs/screenshots/doc-ingestion.png" width="200" alt="Document ingestion interface">
+- **Local document ingestion** for Markdown, text, PDF, Word, Excel, PowerPoint, CSV, source code, JSON, YAML, SQL, HTML, CSS, XML, logs, images (OCR), local folders, and shallow HTTPS Git clones. Scanned PDF pages fall back to OCR when tesseract and poppler are installed. <br><img src="docs/screenshots/doc-ingestion.png" width="200" alt="Document ingestion interface">
 - **Hybrid retrieval** combining SQLite FTS5/BM25, dense cosine similarity, reciprocal-rank fusion, and a local reranking heuristic. Retrieval is scoped to the active index and to document/filename/extension filters before scoring.
 - **Grounded streaming answers** with citations, evidence-quality metadata, trace IDs, and thumbs-up/down feedback. Answers are split into claims and verified against their citations; citations are marked verified or unverified.
 - **Prompt-injection guard** that redacts instruction-like markers from retrieved evidence and wraps it in `<evidence>` delimiters before the provider request.
-- **Inspectable chunking** with configurable chunk size and overlap, line ranges, token counts, SHA-256 deduplication, and version history. <br><img src="docs/screenshots/docs-chunks.png" width="300" alt="Document chunks interface">
+- **Inspectable chunking** with configurable chunk size and overlap, typed chunks (text, heading, table, figure, list, code, equation), page numbers, section titles, character offsets, line ranges, token counts, SHA-256 deduplication, and version history. <br><img src="docs/screenshots/docs-chunks.png" width="300" alt="Document chunks interface">
 - **Blue-green indexes** that can be created, built, validated, evaluated, activated, and rolled back without interrupting the active revision. Builds materialize per-index membership and embeddings; the active index tracks the live corpus so new documents stay searchable without mixing embedding spaces.
 - **Local embeddings** through Ollama (`all-minilm` by default), with optional OpenAI-compatible embedding or generation profiles.
 - **Evaluation and observability** with Recall@100, nDCG@10, MRR@10, traces, latency percentiles, stage timings, query outcomes, and storage metrics.
@@ -191,7 +191,7 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml up 
 
 ### Local development
 
-Requirements: Node.js 22+, npm, Python 3.11+, and Ollama for local embeddings.
+Requirements: Node.js 22+, npm, Python 3.11+, and Ollama for local embeddings. Image and scanned-PDF OCR additionally require the `tesseract` binary (and `poppler` for PDF rendering); without them those files index with no extracted text.
 
 ```bash
 # Terminal 1 — backend

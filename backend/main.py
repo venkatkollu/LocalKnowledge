@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import csv
 import hashlib
 import hmac
 import json
@@ -30,8 +31,9 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from html import unescape
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Iterator
 from urllib.error import HTTPError, URLError
@@ -100,7 +102,11 @@ INJECTION_PATTERNS = [
     re.compile(r"forget\s+(?:all\s+)?(?:your|the)\s+(?:previous\s+)?instructions", re.I),
 ]
 
-INGEST_EXTENSIONS = {"pdf", "md", "txt", "py", "js", "ts", "tsx", "jsx", "json", "yaml", "yml", "csv", "sql", "go", "rs", "html", "css", "xml", "log"}
+INGEST_EXTENSIONS = {
+    "pdf", "md", "txt", "py", "js", "ts", "tsx", "jsx", "json", "yaml", "yml", "csv", "sql", "go", "rs",
+    "html", "htm", "css", "xml", "log", "docx", "xlsx", "pptx", "png", "jpg", "jpeg", "tif", "tiff",
+}
+CHUNK_TYPES = ("text", "heading", "table", "figure", "list", "code", "equation")
 LEGACY_AUTH_SECRET = "local-development-secret"
 PRIVATE_DIR_MODE = 0o700
 PRIVATE_FILE_MODE = 0o600
@@ -214,7 +220,9 @@ def language_for(name: str) -> str:
         "md": "Markdown", "txt": "Text", "py": "Python", "js": "JavaScript",
         "ts": "TypeScript", "tsx": "TSX", "jsx": "JSX", "json": "JSON",
         "yaml": "YAML", "yml": "YAML", "csv": "CSV", "sql": "SQL",
-        "go": "Go", "rs": "Rust", "pdf": "PDF", "html": "HTML",
+        "go": "Go", "rs": "Rust", "pdf": "PDF", "html": "HTML", "htm": "HTML",
+        "docx": "Word", "xlsx": "Excel", "pptx": "PowerPoint", "png": "Image",
+        "jpg": "Image", "jpeg": "Image", "tif": "Image", "tiff": "Image",
     }.get(ext, ext.upper() if ext else "Document")
 
 
@@ -230,10 +238,42 @@ def token_count(text: str) -> int:
     return max(1, len(re.findall(r"\S+", text))) if text.strip() else 0
 
 
-def split_chunks(text: str) -> list[dict[str, Any]]:
+def classify_chunk(value: str) -> str:
+    """Assign one structural chunk type using cheap, deterministic rules."""
+    lines = [line.strip() for line in value.splitlines() if line.strip()]
+    if not lines:
+        return "text"
+    if value.lstrip().startswith("```") or sum(
+        1 for line in value.splitlines() if line.startswith("    ") or line.startswith("\t")
+    ) >= max(2, len(lines) // 2):
+        return "code"
+    if any("$$" in line or line.startswith("\\[") or "\\begin{" in line for line in lines):
+        return "equation"
+    table_rows = sum(1 for line in lines if line.count("|") >= 2 or line.count("\t") >= 2)
+    if table_rows >= 2 or re.match(r"^tables?\s*\d+", lines[0], re.IGNORECASE):
+        return "table"
+    if re.match(r"^#{1,6}\s+", lines[0]):
+        return "heading"
+    if re.match(r"^(?:figure|fig\.|exhibit|image|chart)\s*\d+", lines[0], re.IGNORECASE) or lines[0].startswith("!["):
+        return "figure"
+    if sum(1 for line in lines if re.match(r"^(?:[-*+]|\d+[.)])\s+", line)) >= max(1, len(lines) // 2):
+        return "list"
+    return "text"
+
+
+def split_chunks(
+    text: str,
+    page_spans: list[tuple[int, int, int]] | None = None,
+) -> list[dict[str, Any]]:
+    """Split extracted text into typed chunks with stable position metadata."""
     cleaned = text.replace("\r\n", "\n").replace("\r", "\n").strip()
     if not cleaned:
         return []
+    headings = [
+        (match.start(), match.group(2).strip())
+        for match in re.finditer(r"(?m)^(#{1,6})[ \t]+(.+?)[ \t]*$", cleaned)
+    ]
+    spans = page_spans or []
     chunks: list[dict[str, Any]] = []
     cursor = 0
     ordinal = 0
@@ -243,11 +283,37 @@ def split_chunks(text: str) -> list[dict[str, Any]]:
             boundary = max(cleaned.rfind("\n\n", cursor, end), cleaned.rfind("\n", cursor, end), cleaned.rfind(" ", cursor, end))
             if boundary > cursor + CHUNK_SIZE // 2:
                 end = boundary
-        value = cleaned[cursor:end].strip()
+        raw = cleaned[cursor:end]
+        lead = len(raw) - len(raw.lstrip())
+        value = raw.strip()
         if value:
-            line_start = cleaned.count("\n", 0, cursor) + 1
-            line_end = cleaned.count("\n", 0, end) + 1
-            chunks.append({"ordinal": ordinal, "text": value, "line_start": line_start, "line_end": line_end, "tokens": token_count(value)})
+            start_offset = cursor + lead
+            end_offset = start_offset + len(value)
+            line_start = cleaned.count("\n", 0, start_offset) + 1
+            line_end = cleaned.count("\n", 0, end_offset) + 1
+            chunk_type = classify_chunk(value)
+            section = next(
+                (title for position, title in reversed(headings) if position <= start_offset),
+                None,
+            )
+            if chunk_type == "heading":
+                section = value.splitlines()[0].lstrip("#").strip()
+            page_number = next(
+                (page for page, span_start, span_end in spans if span_start <= start_offset < span_end),
+                None,
+            )
+            chunks.append({
+                "ordinal": ordinal,
+                "text": value,
+                "line_start": line_start,
+                "line_end": line_end,
+                "tokens": token_count(value),
+                "chunk_type": chunk_type,
+                "page_number": page_number,
+                "section": section,
+                "start_offset": start_offset,
+                "end_offset": end_offset,
+            })
             ordinal += 1
         if end >= len(cleaned):
             break
@@ -272,8 +338,26 @@ def cosine(a: list[float], b: list[float]) -> float:
     return sum(x * y for x, y in zip(a, b))
 
 
+_QUERY_STOPWORDS = {
+    # articles, prepositions, conjunctions, pronouns
+    "the", "and", "or", "for", "with", "from", "that", "this", "these", "those",
+    "of", "in", "on", "at", "to", "by", "as", "a", "an", "it", "its",
+    "i", "me", "my", "we", "our", "you", "your", "he", "she", "they", "them",
+    # interrogatives and auxiliaries that carry no retrieval signal
+    "what", "which", "who", "whom", "whose", "why", "how", "when", "where",
+    "is", "are", "was", "were", "be", "been", "being", "am", "do", "does", "did",
+    "have", "has", "had", "can", "could", "would", "should", "will", "shall", "may",
+    "many", "much", "there", "here", "about", "tell", "give", "please",
+}
+
+
 def query_terms(value: str) -> list[str]:
-    return [term for term in re.findall(r"[A-Za-z0-9_]{2,}", value.lower()) if term not in {"the", "and", "for", "with", "from", "that", "this"}]
+    """Content-bearing tokens used for BM25 and lexical relevance scoring."""
+    return [
+        term
+        for term in re.findall(r"[A-Za-z0-9_]{2,}", value.lower())
+        if term not in _QUERY_STOPWORDS
+    ]
 
 
 def fts_query(value: str) -> str:
@@ -312,7 +396,17 @@ def route_query(question: str) -> QueryPlan:
     clean = re.sub(r"\s+", " ", question.strip())
     lower = clean.casefold()
 
-    if re.search(r"\b(list|show|how\s+many|count|which|what)\b.*\b(documents?|files?)\b", lower) and not _METADATA_CONTENT_MARKERS.search(clean):
+    structural = bool(
+        re.search(
+            r"\b(?:contain|containing|include|including|with|having)\b.{0,40}\b(?:tables?|figures?|images?)\b",
+            lower,
+        )
+    )
+    if re.search(
+        r"\b(list|show|find|how\s+many|count|which|what|total)\b.*\b(documents?|files?|pages?)\b"
+        r"|\b(?:total|number\s+of)\s+pages?\b",
+        lower,
+    ) and (not _METADATA_CONTENT_MARKERS.search(clean) or structural):
         intent = "metadata"
     elif re.search(r"\b(figure|image|diagram|chart|plot)\b", lower):
         intent = "figure"
@@ -360,15 +454,30 @@ def route_query(question: str) -> QueryPlan:
     )
 
 
+MONTH_NAMES = (
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
+)
+
+
 def is_metadata_question(question: str) -> bool:
     """True only for questions about the document catalog itself."""
-    if not re.search(r"\b(?:documents?|files?|chunks?)\b", question, re.IGNORECASE):
+    if not re.search(
+        r"\b(?:documents?|files?|chunks?)\b|\b(?:how\s+many|total|number\s+of)\s+pages?\b",
+        question,
+        re.IGNORECASE,
+    ):
         return False
-    if _METADATA_CONTENT_MARKERS.search(question):
+    structural = re.search(
+        r"\b(?:contain|containing|include|including|with|having)\b.{0,40}\b(?:tables?|figures?|images?)\b",
+        question,
+        re.IGNORECASE,
+    )
+    if _METADATA_CONTENT_MARKERS.search(question) and not structural:
         return False
     return bool(
         re.search(
-            r"\b(?:list|show|how\s+many|count|which|what|name|names|status|size|indexed)\b",
+            r"\b(?:list|show|find|how\s+many|count|which|what|name|names|status|size|indexed|uploaded|with|having|containing)\b",
             question,
             re.IGNORECASE,
         )
@@ -534,11 +643,13 @@ def _cache_fingerprint(
     top_k: int | None = None,
     model: str | None = None,
     embedding: str | None = None,
+    combined: bool = False,
 ) -> str:
     identity: dict[str, Any] = {
         "index_id": index_id,
         "filters": filters,
         "intent": intent,
+        "combined": combined,
     }
     if top_k is not None:
         identity["top_k"] = top_k
@@ -656,7 +767,8 @@ CREATE TABLE IF NOT EXISTS documents (
   storage_path TEXT NOT NULL, extension TEXT NOT NULL, language TEXT NOT NULL, size_bytes INTEGER NOT NULL,
   content_hash TEXT NOT NULL, status TEXT NOT NULL, updated_at INTEGER NOT NULL, indexed_at INTEGER,
   version INTEGER NOT NULL DEFAULT 0, parser TEXT, chunker TEXT, embedding TEXT, error TEXT,
-  progress REAL, stage TEXT, deleted_at INTEGER, UNIQUE(workspace_id, content_hash)
+  progress REAL, stage TEXT, title TEXT, author TEXT, uploaded_at INTEGER, pages INTEGER,
+  deleted_at INTEGER, UNIQUE(workspace_id, content_hash)
 );
 CREATE TABLE IF NOT EXISTS document_versions (
   id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, document_id TEXT NOT NULL, version INTEGER NOT NULL,
@@ -667,7 +779,9 @@ CREATE TABLE IF NOT EXISTS document_versions (
 CREATE TABLE IF NOT EXISTS chunks (
   id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, document_id TEXT NOT NULL, version INTEGER NOT NULL,
   ordinal INTEGER NOT NULL, text TEXT NOT NULL, line_start INTEGER NOT NULL, line_end INTEGER NOT NULL,
-  section TEXT, symbol TEXT, tokens INTEGER NOT NULL, embedding_json TEXT, superseded INTEGER NOT NULL DEFAULT 0,
+  section TEXT, symbol TEXT, chunk_type TEXT, page_number INTEGER,
+  start_offset INTEGER, end_offset INTEGER, tokens INTEGER NOT NULL, embedding_json TEXT,
+  superseded INTEGER NOT NULL DEFAULT 0,
   UNIQUE(document_id, version, ordinal)
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(text, chunk_id UNINDEXED, workspace_id UNINDEXED, document_id UNINDEXED);
@@ -828,11 +942,38 @@ def init_db() -> None:
         cache_columns = {row[1] for row in connection.execute("PRAGMA table_info(cache_entries)").fetchall()}
         if cache_columns and not {"filter_fingerprint", "intent_class"}.issubset(cache_columns):
             # Additive migration: verified snapshot before changing the shape.
+            # Run this before any other migration writes so the backup sees a
+            # settled database and cannot block on an open write transaction.
             backup_database(connection, "pre-cache-key-migration")
             if "filter_fingerprint" not in cache_columns:
                 connection.execute("ALTER TABLE cache_entries ADD COLUMN filter_fingerprint TEXT")
             if "intent_class" not in cache_columns:
                 connection.execute("ALTER TABLE cache_entries ADD COLUMN intent_class TEXT")
+
+        # Additive metadata migrations. Existing rows keep NULLs for fields the
+        # old build never captured instead of guessing values.
+        document_columns = {row[1] for row in connection.execute("PRAGMA table_info(documents)").fetchall()}
+        for column, ddl in (
+            ("pages", "INTEGER"),
+            ("title", "TEXT"),
+            ("author", "TEXT"),
+            ("uploaded_at", "INTEGER"),
+        ):
+            if document_columns and column not in document_columns:
+                connection.execute(f"ALTER TABLE documents ADD COLUMN {column} {ddl}")
+        chunk_columns = {row[1] for row in connection.execute("PRAGMA table_info(chunks)").fetchall()}
+        for column, ddl in (
+            ("chunk_type", "TEXT"),
+            ("page_number", "INTEGER"),
+            ("start_offset", "INTEGER"),
+            ("end_offset", "INTEGER"),
+        ):
+            if chunk_columns and column not in chunk_columns:
+                connection.execute(f"ALTER TABLE chunks ADD COLUMN {column} {ddl}")
+        connection.execute(
+            "UPDATE documents SET uploaded_at=updated_at WHERE uploaded_at IS NULL"
+        )
+        connection.execute("UPDATE chunks SET chunk_type='text' WHERE chunk_type IS NULL")
 
         # Keep active indexes self-contained. Candidate indexes stay snapshots
         # until they are activated; active ones track the live chunk set so new
@@ -911,12 +1052,20 @@ def decrypt_key(value: str) -> str:
 
 
 def row_document(row: sqlite3.Row) -> dict[str, Any]:
+    """Canonical document metadata. Descriptive aliases mirror the ingest
+    contract (file_type, file_size, page_count, ...) while the original field
+    names stay for existing clients."""
     return {
-        "id": row["id"], "filename": row["filename"], "path": row["path"], "extension": row["extension"],
+        "id": row["id"], "document_id": row["id"], "filename": row["filename"], "path": row["path"], "extension": row["extension"],
         "language": row["language"], "size_bytes": row["size_bytes"], "chunks": 0, "status": row["status"],
         "updated_at": row["updated_at"], "indexed_at": row["indexed_at"], "version": row["version"],
         "content_hash": row["content_hash"], "parser": row["parser"], "chunker": row["chunker"],
         "embedding": row["embedding"], "error": row["error"], "progress": row["progress"], "stage": row["stage"],
+        "pages": row["pages"], "title": row["title"], "author": row["author"],
+        "uploaded_at": row["uploaded_at"],
+        "file_type": row["extension"], "file_size": row["size_bytes"], "file_hash": row["content_hash"],
+        "upload_date": utc_iso(row["uploaded_at"]), "page_count": row["pages"],
+        "processing_status": row["status"], "total_chunks": 0,
     }
 
 
@@ -1026,13 +1175,42 @@ def embed_text(row: sqlite3.Row | dict[str, Any] | None, text: str) -> list[floa
         raise RuntimeError(f"Embedding provider {row['name']} returned an invalid vector") from exc
 
 
-def read_document_text(path: Path, name: str) -> str:
-    if extension(name) == "pdf":
-        try:
-            from pypdf import PdfReader
-            return "\n\n".join(page.extract_text() or "" for page in PdfReader(str(path)).pages)
-        except Exception:
-            return ""
+@dataclass
+class ExtractedDocument:
+    """Normalized extraction result: text plus the metadata the parser knows."""
+
+    text: str
+    pages: int | None = None
+    title: str | None = None
+    author: str | None = None
+    page_spans: list[tuple[int, int, int]] = field(default_factory=list)
+
+
+class _TextBuilder:
+    """Join blocks and keep character spans for page attribution."""
+
+    def __init__(self) -> None:
+        self.parts: list[str] = []
+        self.spans: list[tuple[int, int, int]] = []
+        self.length = 0
+
+    def add(self, block: str, page: int | None = None) -> None:
+        block = block.strip()
+        if not block:
+            return
+        if self.parts:
+            self.length += 2
+        start = self.length
+        self.parts.append(block)
+        self.length += len(block)
+        if page is not None:
+            self.spans.append((page, start, self.length))
+
+    def text(self) -> str:
+        return "\n\n".join(self.parts)
+
+
+def _decode_text_file(path: Path) -> str:
     output: list[str] = []
     remaining = int(os.getenv("KNOWLEDGEOS_MAX_EXTRACTED_BYTES", str(64 * 1024 * 1024)))
     with path.open("rb") as handle:
@@ -1043,6 +1221,217 @@ def read_document_text(path: Path, name: str) -> str:
             remaining -= len(block)
             output.append(block.decode("utf-8", errors="replace"))
     return "".join(output)
+
+
+def _ocr_image(path: Path) -> str:
+    """Optional OCR. Missing tesseract or OCR libraries yields no text."""
+    try:
+        import pytesseract
+        from PIL import Image
+
+        with Image.open(path) as image:
+            return (pytesseract.image_to_string(image) or "").strip()
+    except Exception:
+        return ""
+
+
+def _ocr_pdf_page(path: Path, page_number: int) -> str:
+    try:
+        import pytesseract
+        from pdf2image import convert_from_path
+
+        images = convert_from_path(str(path), first_page=page_number, last_page=page_number)
+        return "\n".join((pytesseract.image_to_string(image) or "").strip() for image in images).strip()
+    except Exception:
+        return ""
+
+
+def _pdf_document(path: Path) -> ExtractedDocument:
+    try:
+        from pypdf import PdfReader
+
+        reader = PdfReader(str(path))
+    except Exception:
+        return ExtractedDocument(text="")
+    builder = _TextBuilder()
+    for number, page in enumerate(reader.pages, start=1):
+        try:
+            page_text = page.extract_text() or ""
+        except Exception:
+            page_text = ""
+        if not page_text.strip():
+            page_text = _ocr_pdf_page(path, number)
+        builder.add(page_text, number)
+
+    metadata = reader.metadata or {}
+
+    def meta(key: str) -> str | None:
+        value = metadata.get(key) if hasattr(metadata, "get") else None
+        return str(value).strip() or None if value else None
+
+    return ExtractedDocument(
+        text=builder.text(),
+        pages=len(reader.pages),
+        title=meta("/Title"),
+        author=meta("/Author"),
+        page_spans=builder.spans,
+    )
+
+
+def _docx_document(path: Path) -> ExtractedDocument:
+    try:
+        from docx import Document as DocxDocument
+        from docx.table import Table
+        from docx.text.paragraph import Paragraph
+    except Exception:
+        return ExtractedDocument(text="")
+    try:
+        document = DocxDocument(str(path))
+        builder = _TextBuilder()
+        for child in document.element.body.iterchildren():
+            tag = child.tag.rsplit("}", 1)[-1]
+            if tag == "p":
+                paragraph = Paragraph(child, document)
+                value = paragraph.text.strip()
+                if not value:
+                    continue
+                style = (paragraph.style.name or "").lower() if paragraph.style is not None else ""
+                if style.startswith("title"):
+                    builder.add("# " + value)
+                elif style.startswith("heading"):
+                    builder.add("## " + value)
+                else:
+                    builder.add(value)
+            elif tag == "tbl":
+                table = Table(child, document)
+                rows = []
+                for row in table.rows:
+                    cells = [cell.text.strip().replace("\n", " ") for cell in row.cells]
+                    if any(cells):
+                        rows.append("| " + " | ".join(cells) + " |")
+                if rows:
+                    builder.add("\n".join(rows))
+        properties = document.core_properties
+        return ExtractedDocument(
+            text=builder.text(),
+            title=(properties.title or "").strip() or None,
+            author=(properties.author or "").strip() or None,
+        )
+    except Exception:
+        return ExtractedDocument(text="")
+
+
+def _xlsx_document(path: Path) -> ExtractedDocument:
+    try:
+        from openpyxl import load_workbook
+
+        workbook = load_workbook(filename=str(path), read_only=True, data_only=True)
+    except Exception:
+        return ExtractedDocument(text="")
+    builder = _TextBuilder()
+    try:
+        for sheet in workbook.worksheets:
+            rows = []
+            for row in sheet.iter_rows(values_only=True):
+                cells = ["" if value is None else str(value) for value in row]
+                if any(cell.strip() for cell in cells):
+                    rows.append("| " + " | ".join(cells) + " |")
+            if rows:
+                builder.add(f"## Sheet: {sheet.title}\n" + "\n".join(rows))
+    finally:
+        workbook.close()
+    return ExtractedDocument(text=builder.text())
+
+
+def _pptx_document(path: Path) -> ExtractedDocument:
+    try:
+        from pptx import Presentation
+
+        presentation = Presentation(str(path))
+    except Exception:
+        return ExtractedDocument(text="")
+    builder = _TextBuilder()
+    for number, slide in enumerate(presentation.slides, start=1):
+        blocks: list[str] = []
+        for shape in slide.shapes:
+            if getattr(shape, "has_text_frame", False) and shape.has_text_frame:
+                value = shape.text_frame.text.strip()
+                if value:
+                    blocks.append(value)
+            if getattr(shape, "has_table", False) and shape.has_table:
+                for row in shape.table.rows:
+                    cells = [cell.text.strip() for cell in row.cells]
+                    if any(cells):
+                        blocks.append("| " + " | ".join(cells) + " |")
+        if blocks:
+            builder.add("\n\n".join(blocks), number)
+    properties = presentation.core_properties
+    return ExtractedDocument(
+        text=builder.text(),
+        pages=len(presentation.slides),
+        title=(properties.title or "").strip() or None,
+        author=(properties.author or "").strip() or None,
+        page_spans=builder.spans,
+    )
+
+
+def _csv_document(path: Path) -> ExtractedDocument:
+    builder = _TextBuilder()
+    rows = []
+    with path.open(newline="", encoding="utf-8", errors="replace") as handle:
+        for row in csv.reader(handle):
+            cells = [cell.strip() for cell in row]
+            if any(cells):
+                rows.append("| " + " | ".join(cells) + " |")
+    builder.add("\n".join(rows))
+    return ExtractedDocument(text=builder.text())
+
+
+def _html_document(path: Path) -> ExtractedDocument:
+    raw = _decode_text_file(path)
+    title_match = re.search(r"<title[^>]*>(.*?)</title>", raw, re.IGNORECASE | re.DOTALL)
+    title = unescape(title_match.group(1)).strip() if title_match else None
+    body = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", raw)
+    body = re.sub(
+        r"(?i)<h([1-6])[^>]*>",
+        lambda match: "\n\n" + "#" * int(match.group(1)) + " ",
+        body,
+    )
+    body = re.sub(r"(?i)</h[1-6]>|<br\s*/?>|</p>|</div>|</li>|</tr>", "\n", body)
+    body = re.sub(r"(?i)<td[^>]*>", " | ", body)
+    body = re.sub(r"<[^>]+>", " ", body)
+    text = unescape(body)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    return ExtractedDocument(text=text, title=title or None)
+
+
+def _image_document(path: Path) -> ExtractedDocument:
+    return ExtractedDocument(text=_ocr_image(path))
+
+
+def extract_document(path: Path, name: str) -> ExtractedDocument:
+    """Extract normalized text and available metadata for a supported format."""
+    ext = extension(name)
+    if ext == "pdf":
+        return _pdf_document(path)
+    if ext == "docx":
+        return _docx_document(path)
+    if ext == "xlsx":
+        return _xlsx_document(path)
+    if ext == "pptx":
+        return _pptx_document(path)
+    if ext == "csv":
+        return _csv_document(path)
+    if ext in {"html", "htm"}:
+        return _html_document(path)
+    if ext in {"png", "jpg", "jpeg", "tif", "tiff"}:
+        return _image_document(path)
+    return ExtractedDocument(text=_decode_text_file(path))
+
+
+def read_document_text(path: Path, name: str) -> str:
+    return extract_document(path, name).text
 
 
 def set_job(connection: sqlite3.Connection, job_id: str, **fields: Any) -> None:
@@ -1081,13 +1470,15 @@ def process_job(job_id: str) -> None:
                     connection.execute("UPDATE documents SET storage_path=?, size_bytes=?, content_hash=?, status='changed', updated_at=? WHERE id=?", (str(copied), live_size, live_digest, now_ms(), document_id))
                 with db() as connection:
                     document = document_row(connection, workspace_id, document_id)
-        text = read_document_text(Path(document["storage_path"]), document["filename"])
+        extracted = extract_document(Path(document["storage_path"]), document["filename"])
+        text = extracted.text
+        pages = extracted.pages
         if job["kind"] == "sync" and not source_changed and int(document["version"] or 0) > 0 and content_hash(Path(document["storage_path"])) == document["content_hash"]:
             with db() as connection:
                 connection.execute("UPDATE documents SET status='synced', stage=NULL, progress=NULL, error=NULL WHERE id=?", (document_id,))
                 set_job(connection, job_id, status="completed", stage="completed", progress=1)
             return
-        chunks = split_chunks(text)
+        chunks = split_chunks(text, extracted.page_spans)
         with db() as connection:
             set_job(connection, job_id, stage="structure", progress=0.18)
             connection.execute("UPDATE documents SET stage='structure', progress=0.18 WHERE id=?", (document_id,))
@@ -1116,7 +1507,17 @@ def process_job(job_id: str) -> None:
             connection.execute("UPDATE document_versions SET current=0 WHERE document_id=?", (document_id,))
             for chunk, vector in embedded_chunks:
                 chunk_id = str(uuid.uuid4())
-                connection.execute("INSERT INTO chunks(id, workspace_id, document_id, version, ordinal, text, line_start, line_end, tokens, embedding_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (chunk_id, workspace_id, document_id, version, chunk["ordinal"], chunk["text"], chunk["line_start"], chunk["line_end"], chunk["tokens"], json_dumps(vector)))
+                connection.execute(
+                    "INSERT INTO chunks(id, workspace_id, document_id, version, ordinal, text, line_start, line_end, section, chunk_type, page_number, start_offset, end_offset, tokens, embedding_json) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        chunk_id, workspace_id, document_id, version, chunk["ordinal"], chunk["text"],
+                        chunk["line_start"], chunk["line_end"], chunk.get("section"),
+                        chunk.get("chunk_type", "text"), chunk.get("page_number"),
+                        chunk.get("start_offset"), chunk.get("end_offset"), chunk["tokens"],
+                        json_dumps(vector),
+                    ),
+                )
                 connection.execute("INSERT INTO chunks_fts(text, chunk_id, workspace_id, document_id) VALUES (?, ?, ?, ?)", (chunk["text"], chunk_id, workspace_id, document_id))
             if previous_chunk_ids:
                 connection.executemany("UPDATE chunks SET superseded=1 WHERE id=?", [(chunk_id,) for chunk_id in previous_chunk_ids])
@@ -1133,7 +1534,7 @@ def process_job(job_id: str) -> None:
             connection.execute("INSERT INTO document_versions(id, workspace_id, document_id, version, content_hash, created_at, chunks, reused, newly_embedded, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (str(uuid.uuid4()), workspace_id, document_id, version, content_hash_for_version, now_ms(), len(chunks), 0, len(chunks), "Initial ingestion" if version == 1 else "Incremental update"))
             set_job(connection, job_id, stage="validating", progress=0.93)
             connection.execute("UPDATE documents SET stage='validating', progress=0.93 WHERE id=?", (document_id,))
-            connection.execute("UPDATE documents SET status='synced', stage=NULL, progress=NULL, indexed_at=?, version=?, parser=?, chunker=?, error=NULL WHERE id=?", (now_ms(), version, "text-v1", f"fixed-{CHUNK_SIZE}-{CHUNK_OVERLAP}", document_id))
+            connection.execute("UPDATE documents SET status='synced', stage=NULL, progress=NULL, indexed_at=?, version=?, parser=?, chunker=?, pages=?, title=?, author=?, error=NULL WHERE id=?", (now_ms(), version, f"{extension(document['filename']) or 'text'}-v1", f"fixed-{CHUNK_SIZE}-{CHUNK_OVERLAP}", pages, extracted.title or document["title"] or Path(document["filename"]).stem, extracted.author, document_id))
             set_job(connection, job_id, status="completed", stage="completed", progress=1)
         emit_event(workspace_id, "sync", f"{document['filename']} indexed", f"{len(chunks)} chunks", document_id=document_id)
     except Exception as exc:
@@ -1372,7 +1773,7 @@ def queue_document(workspace_id: str, filename: str, path: Path, size: int, dige
             submit_job = job_id
         elif not source_existing:
             document_id = str(uuid.uuid4())
-            connection.execute("INSERT INTO documents(id, workspace_id, filename, path, storage_path, extension, language, size_bytes, content_hash, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'not_indexed', ?)", (document_id, workspace_id, filename, source_path, str(path), extension(filename), language_for(filename), size, digest, timestamp))
+            connection.execute("INSERT INTO documents(id, workspace_id, filename, path, storage_path, extension, language, size_bytes, content_hash, status, title, uploaded_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'not_indexed', ?, ?, ?)", (document_id, workspace_id, filename, source_path, str(path), extension(filename), language_for(filename), size, digest, Path(filename).stem, timestamp, timestamp))
             idempotency_key = f"ingest:{digest}"
             job_id = str(uuid.uuid4())
             connection.execute("INSERT INTO jobs(id, workspace_id, document_id, kind, status, stage, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, 'ingest', 'queued', 'parsing', ?, ?, ?)", (job_id, workspace_id, document_id, idempotency_key, timestamp, timestamp))
@@ -1392,7 +1793,7 @@ def job_public(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
 def list_documents(p: Principal = Depends(principal)) -> dict[str, Any]:
     with db() as connection:
         rows = connection.execute("SELECT d.*, (SELECT COUNT(*) FROM chunks c WHERE c.document_id=d.id AND c.superseded=0) AS chunks FROM documents d WHERE d.workspace_id=? AND d.deleted_at IS NULL ORDER BY d.updated_at DESC", (p.workspace_id,)).fetchall()
-        return {"documents": [row_document(row) | {"chunks": row["chunks"]} for row in rows]}
+        return {"documents": [row_document(row) | {"chunks": row["chunks"], "total_chunks": row["chunks"]} for row in rows]}
 
 
 @app.post("/api/documents")
@@ -1455,10 +1856,26 @@ def get_document(document_id: str, p: Principal = Depends(principal)) -> dict[st
         row = document_row(connection, p.workspace_id, document_id)
         if row is None:
             raise HTTPException(404, "Document not found")
-        chunks = connection.execute("SELECT id, ordinal, line_start, line_end, section, symbol, tokens, text FROM chunks WHERE workspace_id=? AND document_id=? AND superseded=0 ORDER BY ordinal", (p.workspace_id, document_id)).fetchall()
+        chunks = connection.execute("SELECT id, document_id, ordinal, line_start, line_end, section, symbol, chunk_type, page_number, start_offset, end_offset, tokens, text FROM chunks WHERE workspace_id=? AND document_id=? AND superseded=0 ORDER BY ordinal", (p.workspace_id, document_id)).fetchall()
         versions = connection.execute("SELECT version, chunks, created_at, current, content_hash, reused, newly_embedded, note FROM document_versions WHERE workspace_id=? AND document_id=? ORDER BY version DESC", (p.workspace_id, document_id)).fetchall()
     text = read_document_text(Path(row["storage_path"]), row["filename"])
-    return {"document": row_document(row) | {"chunks": row["chunks"]}, "content": text, "chunks": [{"id": c["id"], "index": c["ordinal"], "line_start": c["line_start"], "line_end": c["line_end"], "section": c["section"], "symbol": c["symbol"], "tokens": c["tokens"], "excerpt": c["text"]} for c in chunks], "versions": [dict(v) for v in versions]}
+    return {
+        "document": row_document(row) | {"chunks": row["chunks"], "total_chunks": row["chunks"]},
+        "content": text,
+        "chunks": [
+            {
+                "id": c["id"], "chunk_id": c["id"], "document_id": c["document_id"],
+                "index": c["ordinal"], "chunk_index": c["ordinal"],
+                "line_start": c["line_start"], "line_end": c["line_end"],
+                "section": c["section"], "section_title": c["section"], "symbol": c["symbol"],
+                "chunk_type": c["chunk_type"] or "text", "page_number": c["page_number"],
+                "start_offset": c["start_offset"], "end_offset": c["end_offset"],
+                "tokens": c["tokens"], "excerpt": c["text"], "content": c["text"],
+            }
+            for c in chunks
+        ],
+        "versions": [dict(v) for v in versions],
+    }
 
 
 @app.delete("/api/documents/{document_id}", status_code=202)
@@ -2052,6 +2469,71 @@ def refresh_index_membership(connection: sqlite3.Connection, workspace_id: str, 
     return inserted
 
 
+def _epoch_ms(value: Any) -> int | None:
+    if isinstance(value, (int, float)):
+        return int(value)
+    try:
+        return int(datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp() * 1000)
+    except ValueError:
+        return None
+
+
+def document_filter_clauses(
+    filters: dict[str, Any],
+    document_alias: str = "d",
+    chunk_alias: str = "fc",
+) -> tuple[list[str], list[Any]]:
+    """Translate catalog filters into SQL so they constrain the candidate set
+    before ranking instead of filtering results afterwards."""
+    clauses: list[str] = []
+    params: list[Any] = []
+    filename = filters.get("filename")
+    if filename:
+        clauses.append(f"{document_alias}.filename=? COLLATE NOCASE")
+        params.append(str(filename).strip())
+    filenames = filters.get("filenames")
+    if isinstance(filenames, str):
+        filenames = [filenames]
+    if isinstance(filenames, (list, tuple, set)):
+        names = [str(name).strip() for name in filenames if str(name).strip()]
+        if names:
+            placeholders = ",".join("?" * len(names))
+            clauses.append(f"{document_alias}.filename COLLATE NOCASE IN ({placeholders})")
+            params.extend(names)
+    file_type = filters.get("file_type") or filters.get("extension")
+    if file_type:
+        clauses.append(f"{document_alias}.extension=?")
+        params.append(str(file_type).lower().lstrip("."))
+    for key, operator in (("min_pages", ">="), ("max_pages", "<=")):
+        if filters.get(key) is None:
+            continue
+        try:
+            threshold = int(filters[key])
+        except (TypeError, ValueError):
+            continue
+        clauses.append(f"{document_alias}.pages IS NOT NULL AND {document_alias}.pages {operator} ?")
+        params.append(threshold)
+    for key, operator in (("uploaded_after", ">="), ("uploaded_before", "<=")):
+        if filters.get(key) is None:
+            continue
+        timestamp = _epoch_ms(filters[key])
+        if timestamp is None:
+            continue
+        clauses.append(
+            f"COALESCE({document_alias}.uploaded_at, {document_alias}.updated_at) {operator} ?"
+        )
+        params.append(timestamp)
+    for key, chunk_type in (("has_tables", "table"), ("has_figures", "figure")):
+        if not filters.get(key):
+            continue
+        clauses.append(
+            f"EXISTS (SELECT 1 FROM chunks {chunk_alias} "
+            f"WHERE {chunk_alias}.document_id={document_alias}.id "
+            f"AND {chunk_alias}.superseded=0 AND {chunk_alias}.chunk_type='{chunk_type}')"
+        )
+    return clauses, params
+
+
 def retrieve(
     connection: sqlite3.Connection,
     workspace_id: str,
@@ -2075,23 +2557,9 @@ def retrieve(
         scope_clauses.append(f"c.document_id IN ({placeholders})")
         scope_params.extend(document_ids)
     if filters:
-        filename = filters.get("filename")
-        if filename:
-            scope_clauses.append("d.filename=? COLLATE NOCASE")
-            scope_params.append(str(filename).strip())
-        filenames = filters.get("filenames")
-        if isinstance(filenames, str):
-            filenames = [filenames]
-        if isinstance(filenames, (list, tuple, set)):
-            names = [str(name).strip() for name in filenames if str(name).strip()]
-            if names:
-                placeholders = ",".join("?" * len(names))
-                scope_clauses.append(f"d.filename COLLATE NOCASE IN ({placeholders})")
-                scope_params.extend(names)
-        extension_filter = filters.get("extension")
-        if extension_filter:
-            scope_clauses.append("d.extension=?")
-            scope_params.append(str(extension_filter).lower().lstrip("."))
+        filter_clauses, filter_params = document_filter_clauses(filters, "d", "fc")
+        scope_clauses.extend(filter_clauses)
+        scope_params.extend(filter_params)
 
     scope_sql = (" AND " + " AND ".join(scope_clauses)) if scope_clauses else ""
     index_join = (
@@ -2163,12 +2631,16 @@ def retrieve(
         bm25_position = lexical_rank.get(chunk_id)
         dense_position = dense_rank.get(chunk_id)
         source = "both" if bm25_position and dense_position else "bm25" if bm25_position else "dense"
-        candidates.append({"chunk_id": row["id"], "document_id": row["document_id"], "filename": row["filename"], "source": source, "cosine": dense, "bm25_rank": bm25_position, "rrf_score": (1 / (60 + bm25_position) if bm25_position else 0) + (1 / (60 + dense_position) if dense_position else 0), "reranker_score": lexical * 0.55 + max(0, dense) * 0.45, "excerpt": row["text"]})
+        # The fused reranker score ranks candidates; the evidence score is the
+        # strongest independent relevance signal. Gating on the fused score
+        # alone rejects chunks that match every query term but score a lower
+        # dense similarity (for example after a provider/embedding change).
+        candidates.append({"chunk_id": row["id"], "document_id": row["document_id"], "filename": row["filename"], "source": source, "cosine": dense, "bm25_rank": bm25_position, "lexical_score": lexical, "rrf_score": (1 / (60 + bm25_position) if bm25_position else 0) + (1 / (60 + dense_position) if dense_position else 0), "reranker_score": lexical * 0.55 + max(0, dense) * 0.45, "evidence_score": max(lexical, max(0.0, dense)), "excerpt": row["text"]})
     candidates.sort(key=lambda value: (value["reranker_score"], value["rrf_score"]), reverse=True)
     citations = []
     for candidate in candidates[:top_k]:
         row = by_id[candidate["chunk_id"]]
-        citations.append({"chunk_id": row["id"], "document_id": row["document_id"], "filename": row["filename"], "path": row["path"], "line_start": row["line_start"], "line_end": row["line_end"], "version": row["document_version"], "excerpt": row["text"], "score": candidate["reranker_score"], "verification": "unverified"})
+        citations.append({"chunk_id": row["id"], "document_id": row["document_id"], "filename": row["filename"], "path": row["path"], "line_start": row["line_start"], "line_end": row["line_end"], "version": row["document_version"], "excerpt": row["text"], "chunk_type": row["chunk_type"] or "text", "page_number": row["page_number"], "section": row["section"], "start_offset": row["start_offset"], "end_offset": row["end_offset"], "score": candidate["reranker_score"], "lexical_score": candidate["lexical_score"], "evidence_score": candidate["evidence_score"], "verification": "unverified"})
     return candidates[:top_k], citations
 
 
@@ -2250,6 +2722,18 @@ def cache_store(
     )
 
 
+def is_combined_question(question: str) -> bool:
+    """True when the question asks which document covers a topic *and* what it says."""
+    return bool(
+        re.search(
+            r"\b(?:which|what|identify\s+the)\s+(?:document|documents|file|files|paper|papers|source|sources?)\b",
+            question,
+            re.IGNORECASE,
+        )
+        and _METADATA_CONTENT_MARKERS.search(question)
+    )
+
+
 def answer_question(p: Principal, payload: ChatRequest) -> dict[str, Any]:
     started = time.perf_counter()
     timings: dict[str, float] = {}
@@ -2272,25 +2756,17 @@ def answer_question(p: Principal, payload: ChatRequest) -> dict[str, Any]:
         normalized_question = payload.question.casefold()
         with db() as connection:
             catalog_sql = (
-                "SELECT d.*, (SELECT COUNT(*) FROM chunks c WHERE c.document_id=d.id AND c.superseded=0) AS chunks "
+                "SELECT d.*, "
+                "(SELECT COUNT(*) FROM chunks c WHERE c.document_id=d.id AND c.superseded=0) AS chunks, "
+                "(SELECT COUNT(*) FROM chunks c WHERE c.document_id=d.id AND c.superseded=0 AND c.chunk_type='table') AS tables, "
+                "(SELECT COUNT(*) FROM chunks c WHERE c.document_id=d.id AND c.superseded=0 AND c.chunk_type='figure') AS figures "
                 "FROM documents d WHERE d.workspace_id=? AND d.deleted_at IS NULL"
             )
             catalog_params: list[Any] = [p.workspace_id]
-            if effective_filters.get("filename"):
-                catalog_sql += " AND d.filename=? COLLATE NOCASE"
-                catalog_params.append(str(effective_filters["filename"]).strip())
-            filenames = effective_filters.get("filenames")
-            if isinstance(filenames, str):
-                filenames = [filenames]
-            if isinstance(filenames, (list, tuple, set)):
-                names = [str(name).strip() for name in filenames if str(name).strip()]
-                if names:
-                    placeholders = ",".join("?" * len(names))
-                    catalog_sql += f" AND d.filename COLLATE NOCASE IN ({placeholders})"
-                    catalog_params.extend(names)
-            if effective_filters.get("extension"):
-                catalog_sql += " AND d.extension=?"
-                catalog_params.append(str(effective_filters["extension"]).lower().lstrip("."))
+            filter_clauses, filter_params = document_filter_clauses(effective_filters, "d", "mc")
+            for clause in filter_clauses:
+                catalog_sql += " AND " + clause
+            catalog_params.extend(filter_params)
             if payload.document_id:
                 catalog_sql += " AND d.id=?"
                 catalog_params.append(payload.document_id)
@@ -2301,7 +2777,14 @@ def answer_question(p: Principal, payload: ChatRequest) -> dict[str, Any]:
             rows = connection.execute(catalog_sql + " ORDER BY d.updated_at DESC", catalog_params).fetchall()
             if payload.document_id and not rows:
                 raise HTTPException(404, "Document not found in this workspace")
-            all_documents = [row_document(row) | {"chunks": row["chunks"]} for row in rows]
+            all_documents = [
+                row_document(row)
+                | {
+                    "chunks": row["chunks"], "total_chunks": row["chunks"],
+                    "tables": row["tables"], "figures": row["figures"],
+                }
+                for row in rows
+            ]
 
             # --- Helper to build the response object ---
             def build_metadata_response(
@@ -2365,6 +2848,7 @@ def answer_question(p: Principal, payload: ChatRequest) -> dict[str, Any]:
                     doc for doc in all_documents
                     if needle.lower() in doc["filename"].lower()
                     or Path(doc["filename"]).stem.lower() == needle.lower()
+                    or needle.lower() == doc["id"].lower()
                 ]
                 if not matches:
                     answer = f"I don't see a document named `{needle}` in this workspace."
@@ -2376,6 +2860,143 @@ def answer_question(p: Principal, payload: ChatRequest) -> dict[str, Any]:
                         f"- `{doc['filename']}` — {doc['chunks']} chunks"
                         for doc in matches
                     )
+                return build_metadata_response(answer, matches)
+
+            # --- Per-document "how many pages does X have" ---
+            pages_match = re.search(
+                r"how\s+many\s+pages\s+(?:does|do|has|have)\s+([\w.\- ]+?)\s+(?:have|has|contain)\b",
+                normalized_question,
+            )
+            if pages_match:
+                needle = pages_match.group(1).strip().rstrip("?.!").strip()
+                matches = [
+                    doc for doc in all_documents
+                    if needle.lower() in doc["filename"].lower()
+                    or Path(doc["filename"]).stem.lower() == needle.lower()
+                    or needle.lower() == doc["id"].lower()
+                ]
+                if not matches:
+                    answer = f"I don't see a document named `{needle}` in this workspace."
+                elif len(matches) == 1:
+                    doc = matches[0]
+                    if doc["pages"] is None:
+                        answer = (
+                            f"`{doc['filename']}` has no stored page count "
+                            "(page counts are recorded for PDFs)."
+                        )
+                    else:
+                        answer = f"`{doc['filename']}` has **{doc['pages']}** pages."
+                else:
+                    answer = "\n".join(
+                        f"- `{doc['filename']}` — "
+                        + (f"{doc['pages']} pages" if doc["pages"] is not None else "no stored page count")
+                        for doc in matches
+                    )
+                return build_metadata_response(answer, matches)
+
+            # --- Filter by a page-count comparison ---
+            page_filter = re.search(
+                r"\b(more|greater|bigger|over|above|fewer|less|under|below|at\s+least|at\s+most)\b"
+                r"[^.]*?\b(\d+)\s+pages?\b",
+                normalized_question,
+            )
+            if page_filter:
+                operator = re.sub(r"\s+", " ", page_filter.group(1).lower())
+                threshold = int(page_filter.group(2))
+                if operator in {"more", "greater", "bigger", "over", "above"}:
+                    matches = [d for d in all_documents if d["pages"] is not None and d["pages"] > threshold]
+                    label = f"more than {threshold} pages"
+                elif operator == "at least":
+                    matches = [d for d in all_documents if d["pages"] is not None and d["pages"] >= threshold]
+                    label = f"at least {threshold} pages"
+                elif operator == "at most":
+                    matches = [d for d in all_documents if d["pages"] is not None and d["pages"] <= threshold]
+                    label = f"at most {threshold} pages"
+                else:
+                    matches = [d for d in all_documents if d["pages"] is not None and d["pages"] < threshold]
+                    label = f"fewer than {threshold} pages"
+                if re.search(r"\bhow many\b", normalized_question):
+                    answer = f"{len(matches)} document{'s' if len(matches) != 1 else ''} with {label}."
+                elif matches:
+                    answer = (
+                        f"{len(matches)} document{'s' if len(matches) != 1 else ''} with {label}:\n"
+                        + "\n".join(f"- `{doc['filename']}` ({doc['pages']} pages)" for doc in matches)
+                    )
+                else:
+                    answer = f"No documents with {label}."
+                return build_metadata_response(answer, matches)
+
+            # --- Total pages across the catalog (only parsers that expose pages) ---
+            if re.search(r"\bpages?\b", normalized_question) and re.search(
+                r"\b(total|across|number\s+of|how\s+many)\b", normalized_question
+            ):
+                known = [doc for doc in all_documents if doc["pages"] is not None]
+                total = sum(int(doc["pages"]) for doc in known)
+                unknown = len(all_documents) - len(known)
+                answer = (
+                    f"Your documents contain {total} page{'s' if total != 1 else ''} in total "
+                    f"across {len(known)} document{'s' if len(known) != 1 else ''}."
+                )
+                if unknown:
+                    answer += (
+                        f" {unknown} document{'s' if unknown != 1 else ''} have no stored "
+                        "page count (only PDFs record pages)."
+                    )
+                return build_metadata_response(answer, known)
+
+            # --- Most recently uploaded document ---
+            if re.search(
+                r"\b(?:most\s+recent(?:ly)?|latest|newest|last\s+(?:uploaded|added|indexed))\b",
+                normalized_question,
+            ):
+                if not all_documents:
+                    return build_metadata_response("There are no documents in this workspace.", [])
+                newest = max(all_documents, key=lambda doc: doc["updated_at"] or 0)
+                answer = (
+                    f"The most recently uploaded document is `{newest['filename']}`"
+                    + (f" (updated {utc_iso(newest['updated_at'])})" if newest["updated_at"] else "")
+                    + "."
+                )
+                return build_metadata_response(answer, [newest])
+
+            # --- Documents uploaded in a named month ---
+            month_match = re.search(
+                r"\b(january|february|march|april|may|june|july|august|september|october|november|december)\b",
+                normalized_question,
+            )
+            if month_match:
+                month_number = MONTH_NAMES.index(month_match.group(1)) + 1
+                default_year = time.gmtime().tm_year
+                year_match = re.search(r"\b(20\d{2})\b", normalized_question)
+                year = int(year_match.group(1)) if year_match else None
+                matches = []
+                for doc in all_documents:
+                    if not doc["updated_at"]:
+                        continue
+                    uploaded = time.gmtime(doc["updated_at"] / 1000)
+                    if uploaded.tm_mon != month_number:
+                        continue
+                    if year is not None and uploaded.tm_year != year:
+                        continue
+                    matches.append(doc)
+                label = month_match.group(1).capitalize()
+                if year is not None:
+                    label += f" {year}"
+                elif matches:
+                    label += f" {time.gmtime(matches[0]['updated_at'] / 1000).tm_year}"
+                if re.search(r"\bhow many\b", normalized_question):
+                    answer = (
+                        f"{len(matches)} document{'s' if len(matches) != 1 else ''} "
+                        f"uploaded in {label}."
+                    )
+                elif matches:
+                    answer = (
+                        f"{len(matches)} document{'s' if len(matches) != 1 else ''} "
+                        f"uploaded in {label}:\n"
+                        + "\n".join(f"- `{doc['filename']}`" for doc in matches)
+                    )
+                else:
+                    answer = f"No documents were uploaded in {label} (current year {default_year})."
                 return build_metadata_response(answer, matches)
 
             # --- "which document has the most chunks" ---
@@ -2450,6 +3071,27 @@ def answer_question(p: Principal, payload: ChatRequest) -> dict[str, Any]:
                             answer = f"No documents have status `{status}`."
                     return build_metadata_response(answer, matches)
 
+            # --- Documents containing tables / figures ---
+            structural_match = re.search(
+                r"\b(tables?|figures?|images?|charts?)\b", normalized_question
+            )
+            if structural_match and re.search(r"\b(documents?|files?)\b", normalized_question):
+                wanted = structural_match.group(1).lower()
+                key = "tables" if wanted.startswith("table") else "figures"
+                matches = [doc for doc in all_documents if doc[key]]
+                if re.search(r"\bhow many\b", normalized_question):
+                    answer = f"{len(matches)} document{'s' if len(matches) != 1 else ''} contain {key}."
+                elif matches:
+                    answer = (
+                        f"{len(matches)} document{'s' if len(matches) != 1 else ''} contain {key}:\n"
+                        + "\n".join(
+                            f"- `{doc['filename']}` ({doc[key]} {key})" for doc in matches
+                        )
+                    )
+                else:
+                    answer = f"No documents contain {key}."
+                return build_metadata_response(answer, matches)
+
             # --- Plain count / plain list ---
             count = len(all_documents)
             if re.search(r"\bhow many\b|\bcount\b", normalized_question):
@@ -2485,6 +3127,11 @@ def answer_question(p: Principal, payload: ChatRequest) -> dict[str, Any]:
     embedding_provider = dict(embedding_provider) if embedding_provider is not None else None
     use_dense = embedding_space_compatible(index, embedding_provider)
 
+    combined = (
+        is_combined_question(payload.question)
+        and not payload.document_id
+        and not effective_document_ids
+    )
     fingerprint = _cache_fingerprint(
         index_id or "unindexed",
         effective_filters,
@@ -2492,6 +3139,7 @@ def answer_question(p: Principal, payload: ChatRequest) -> dict[str, Any]:
         payload.top_k,
         provider["model"] if provider else None,
         embedding_identity(embedding_provider),
+        combined=combined,
     )
 
     # Provider calls must not share a live SQLite transaction. In WAL mode a
@@ -2587,8 +3235,36 @@ def answer_question(p: Principal, payload: ChatRequest) -> dict[str, Any]:
             candidates = sorted(by_chunk.values(), key=lambda item: (item["reranker_score"], item["rrf_score"]), reverse=True)[:payload.top_k]
             citations = [citation_by_chunk[item["chunk_id"]] for item in candidates if item["chunk_id"] in citation_by_chunk][:payload.top_k]
 
+    # Combined questions first resolve which documents cover the topic, then
+    # run a second content pass restricted to that catalog-derived document set.
+    candidate_documents: list[dict[str, Any]] = []
+    if combined and citations:
+        candidate_document_ids = list(dict.fromkeys(item["document_id"] for item in candidates))[:3]
+        if len(candidate_document_ids) > 1:
+            with db() as connection:
+                candidates, citations = retrieve(
+                    connection,
+                    p.workspace_id,
+                    query_parts[0],
+                    payload.top_k,
+                    cache_embedding,
+                    document_ids=candidate_document_ids,
+                    filters=effective_filters or None,
+                    index_id=index_id,
+                    use_dense=use_dense,
+                )
+        candidate_documents = list(
+            {
+                item["document_id"]: {"id": item["document_id"], "filename": item["filename"]}
+                for item in candidates
+            }.values()
+        )
+
     timings["hybrid_retrieval"] = (time.perf_counter() - started) * 1000 - timings["query_embedding"]
-    confidence = max((citation.get("score", 0) for citation in citations), default=0.0)
+    confidence = max(
+        (citation.get("evidence_score", citation.get("score", 0.0)) for citation in citations),
+        default=0.0,
+    )
     if not citations or confidence < SETTINGS.abstain_threshold:
         decision = "abstain"
         answer = "I don't have enough indexed evidence to answer that question."
@@ -2694,6 +3370,8 @@ def answer_question(p: Principal, payload: ChatRequest) -> dict[str, Any]:
             "document_ids": effective_document_ids,
             "index_id": index_id,
             "dense_used": use_dense,
+            "combined": combined,
+            "candidate_documents": candidate_documents,
         },
         "trace_id": trace_id,
         "latency_ms": round((time.perf_counter() - started) * 1000, 2),

@@ -20,6 +20,19 @@ def test_empty_document_metadata(client, corpus):
     assert "0" in r["answer"]
 
 
+def test_full_keyword_match_not_rejected_by_evidence_gate(
+    client, corpus, active_index_with_corpus, monkeypatch
+):
+    import backend.main as m
+
+    # Production default gate: a chunk matching every query term must not be
+    # discarded just because synthetic hash embeddings score low cosine.
+    monkeypatch.setattr(m.SETTINGS, "abstain_threshold", 0.6)
+    r = chat(client, "What optimizer does LoRA use?")
+    assert r["citations"]
+    assert r["evidence"]["decision"] != "abstain"
+
+
 def test_retrieved_answer_used_when_evidence_exists(client, corpus, active_index_with_corpus):
     r = chat(client, "What optimizer does LoRA use?")
     assert r["evidence"]["decision"] != "abstain"
