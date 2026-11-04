@@ -1,6 +1,13 @@
 import { apiRequest, ApiError, getApiBase } from "./client";
 import type { ChatResponse } from "./types";
 
+/** Progress reported by the streaming endpoint before the answer arrives. */
+export interface StreamProgress {
+  phase: "retrieved" | "answering";
+  /** Citations found for this question, when the backend has finished retrieval. */
+  citations?: number;
+}
+
 export interface HealthStatus {
   ok: boolean;
   version?: string;
@@ -39,7 +46,7 @@ export async function askKnowledge(question: string, signal?: AbortSignal): Prom
   return normaliseChatResponse(value);
 }
 
-export async function askKnowledgeStream(question: string, signal: AbortSignal | undefined, onToken: (text: string) => void): Promise<ChatResponse> {
+export async function askKnowledgeStream(question: string, signal: AbortSignal | undefined, onToken: (text: string) => void, onProgress?: (progress: StreamProgress) => void): Promise<ChatResponse> {
   const streamHeaders: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "text/event-stream",
@@ -58,6 +65,7 @@ export async function askKnowledgeStream(question: string, signal: AbortSignal |
   let buffer = "";
   let event = "message";
   let final: ChatResponse | null = null;
+  let answering = false;
   const parseBlock = (block: string) => {
     let data = "";
     for (const line of block.split("\n")) {
@@ -66,7 +74,11 @@ export async function askKnowledgeStream(question: string, signal: AbortSignal |
     }
     if (!data) return;
     const payload = JSON.parse(data) as Record<string, unknown>;
-    if (event === "token") onToken(String(payload.text ?? ""));
+    if (event === "citations") onProgress?.({ phase: "retrieved", citations: Array.isArray(payload.citations) ? payload.citations.length : 0 });
+    if (event === "token") {
+      if (!answering) { answering = true; onProgress?.({ phase: "answering" }); }
+      onToken(String(payload.text ?? ""));
+    }
     if (event === "done") final = normaliseChatResponse(payload);
     if (event === "error") throw new ApiError(String(payload.error ?? "Stream failed"));
     event = "message";
