@@ -1,0 +1,6 @@
+LoRA freezes the pre-trained model weights and injects trainable low-rank
+decomposition matrices into each Transformer layer.
+
+LoRA does not quantize the base model; base weights stay in 16-bit precision.
+
+LoRA uses the AdamW optimizer with a linear learning-rate schedule.

@@ -1,0 +1,10 @@
+[
+  {"question": "What optimizer does LoRA use?",                "doc": "lora.txt"},
+  {"question": "Does LoRA quantize the base model?",           "doc": "lora.txt"},
+  {"question": "Does QLoRA quantize the base model?",          "doc": "qlora.txt"},
+  {"question": "What precision does QLoRA store the base in?", "doc": "qlora.txt"},
+  {"question": "How many attention heads does BERT-base use?", "doc": "bert.txt"},
+  {"question": "What objective is BERT pre-trained with?",     "doc": "bert.txt"},
+  {"question": "How does FlashAttention reduce memory?",       "doc": "flash.txt"},
+  {"question": "What is the asymptotic complexity of FlashAttention?", "doc": "flash.txt"}
+]

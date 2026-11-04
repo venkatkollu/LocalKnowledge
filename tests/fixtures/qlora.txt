@@ -1,0 +1,6 @@
+QLoRA stores the base model in 4-bit NormalFloat (NF4) and dequantizes to BF16
+during computation.
+
+Unlike LoRA, QLoRA quantizes the base model; only the adapter weights stay 16-bit.
+
+QLoRA uses a constant learning-rate schedule and paged optimizers.

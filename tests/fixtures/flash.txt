@@ -1,0 +1,5 @@
+FlashAttention reduces memory usage by computing the softmax normalization
+constant separately and tiling the computation in shared memory.
+
+FlashAttention keeps the same asymptotic complexity as standard attention
+(quadratic in sequence length) but cuts HBM accesses.
