@@ -358,7 +358,7 @@ def route_query(question: str) -> QueryPlan:
 
 def is_metadata_question(question: str) -> bool:
     """True only for questions about the document catalog itself."""
-    if not re.search(r"\b(?:documents?|files?)\b", question, re.IGNORECASE):
+    if not re.search(r"\b(?:documents?|files?|chunks?)\b", question, re.IGNORECASE):
         return False
     if _METADATA_CONTENT_MARKERS.search(question):
         return False
@@ -2296,59 +2296,168 @@ def answer_question(p: Principal, payload: ChatRequest) -> dict[str, Any]:
             rows = connection.execute(catalog_sql + " ORDER BY d.updated_at DESC", catalog_params).fetchall()
             if payload.document_id and not rows:
                 raise HTTPException(404, "Document not found in this workspace")
-            documents = [row_document(row) | {"chunks": row["chunks"]} for row in rows]
-            count = len(documents)
-            answer = f"There {'is' if count == 1 else 'are'} {count} document{'s' if count != 1 else ''} in this workspace."
-            if documents and re.search(r"\b(?:list|show|which|what|name|names)\b", normalized_question):
-                answer += "\n" + "\n".join(
-                    f"- {item['filename']} ({item['chunks']} chunks; {item['status']})"
-                    for item in documents
+            all_documents = [row_document(row) | {"chunks": row["chunks"]} for row in rows]
+
+            # --- Helper to build the response object ---
+            def build_metadata_response(
+                answer: str,
+                documents: list[dict[str, Any]],
+            ) -> dict[str, Any]:
+                trace_id = str(uuid.uuid4())
+                connection.execute(
+                    "INSERT INTO traces(id, request_id, workspace_id, route, cache_hit, index_version, "
+                    "prompt_version, stage_timings_json, outcome, created_at) "
+                    "VALUES (?, ?, ?, '/chat', 0, 'metadata', ?, ?, 'metadata_answer', ?)",
+                    (
+                        trace_id,
+                        request_id,
+                        p.workspace_id,
+                        PROMPT_VERSION,
+                        json_dumps({"metadata_sql": (time.perf_counter() - started) * 1000}),
+                        now_ms(),
+                    ),
                 )
-            trace_id = str(uuid.uuid4())
-            connection.execute(
-                "INSERT INTO traces(id, request_id, workspace_id, route, cache_hit, index_version, "
-                "prompt_version, stage_timings_json, outcome, created_at) "
-                "VALUES (?, ?, ?, '/chat', 0, 'metadata', ?, ?, 'metadata_answer', ?)",
-                (
-                    trace_id,
-                    request_id,
-                    p.workspace_id,
-                    PROMPT_VERSION,
-                    json_dumps({"metadata_sql": (time.perf_counter() - started) * 1000}),
-                    now_ms(),
-                ),
+                return {
+                    "question": payload.question,
+                    "answer": answer,
+                    "evidence": {
+                        "decision": "metadata_answer",
+                        "query_coverage": 1.0,
+                        "evidence_agreement": 1.0,
+                        "supporting_sources": len(documents),
+                        "citation_verification": False,
+                        "evidence_score": 1.0,
+                    },
+                    "citations": [],
+                    "documents": documents,
+                    "retrieval": {
+                        "stages": [
+                            {
+                                "label": "Document metadata SQL",
+                                "candidates": len(documents),
+                                "ms": round((time.perf_counter() - started) * 1000, 2),
+                            }
+                        ],
+                        "candidates": [],
+                        "evidence_passed": True,
+                        "intent": "metadata",
+                        "filters": effective_filters,
+                        "document_ids": effective_document_ids,
+                        "index_id": None,
+                    },
+                    "trace_id": trace_id,
+                    "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+                }
+
+            # --- Per-document "how many chunks does X have" ---
+            chunk_count_match = re.search(
+                r"how\s+many\s+chunks\s+(?:does|do|has|have)\s+([\w.\- ]+?)\s+(?:have|has|contain)\b",
+                normalized_question,
             )
-        return {
-            "question": payload.question,
-            "answer": answer,
-            "evidence": {
-                "decision": "metadata_answer",
-                "query_coverage": 1.0,
-                "evidence_agreement": 1.0,
-                "supporting_sources": count,
-                "citation_verification": False,
-                "evidence_score": 1.0,
-            },
-            "citations": [],
-            "documents": documents,
-            "retrieval": {
-                "stages": [
-                    {
-                        "label": "Document metadata SQL",
-                        "candidates": count,
-                        "ms": round((time.perf_counter() - started) * 1000, 2),
-                    }
-                ],
-                "candidates": [],
-                "evidence_passed": True,
-                "intent": "metadata",
-                "filters": effective_filters,
-                "document_ids": effective_document_ids,
-                "index_id": None,
-            },
-            "trace_id": trace_id,
-            "latency_ms": round((time.perf_counter() - started) * 1000, 2),
-        }
+            if chunk_count_match:
+                needle = chunk_count_match.group(1).strip().rstrip("?.!").strip()
+                matches = [
+                    doc for doc in all_documents
+                    if needle.lower() in doc["filename"].lower()
+                    or Path(doc["filename"]).stem.lower() == needle.lower()
+                ]
+                if not matches:
+                    answer = f"I don't see a document named `{needle}` in this workspace."
+                elif len(matches) == 1:
+                    doc = matches[0]
+                    answer = f"`{doc['filename']}` has **{doc['chunks']}** chunks."
+                else:
+                    answer = "\n".join(
+                        f"- `{doc['filename']}` — {doc['chunks']} chunks"
+                        for doc in matches
+                    )
+                return build_metadata_response(answer, matches)
+
+            # --- "which document has the most chunks" ---
+            if re.search(r"\bmost\b|\blargest\b|\bbiggest\b", normalized_question):
+                if not all_documents:
+                    answer = "There are no documents in this workspace."
+                    docs = []
+                else:
+                    top = max(all_documents, key=lambda d: d["chunks"])
+                    answer = (
+                        f"`{top['filename']}` has the most chunks "
+                        f"(**{top['chunks']}**)."
+                    )
+                    docs = [top]
+                return build_metadata_response(answer, docs)
+
+            # --- Filter by "zero chunks" / "empty" / "no chunks" ---
+            if re.search(r"\bzero\b|\bempty\b|\bno chunks\b", normalized_question):
+                zero_docs = [d for d in all_documents if d["chunks"] == 0]
+                if re.search(r"\bhow many\b", normalized_question):
+                    answer = f"{len(zero_docs)} document{'s' if len(zero_docs) != 1 else ''} have zero chunks."
+                else:
+                    if zero_docs:
+                        answer = (
+                            f"{len(zero_docs)} document{'s' if len(zero_docs) != 1 else ''} with zero chunks:\n"
+                            + "\n".join(f"- `{d['filename']}`" for d in zero_docs)
+                        )
+                    else:
+                        answer = "No documents have zero chunks."
+                return build_metadata_response(answer, zero_docs)
+
+            # --- Filter by extension ("how many files are PDFs / markdown") ---
+            extension_match = re.search(
+                r"\b(?:are|is)\s+(pdf|markdown|md|txt|python|py|json|yaml|csv|sql|html|go|rust|rs)\b",
+                normalized_question,
+            )
+            if extension_match:
+                ext_aliases = {
+                    "pdf": "pdf", "markdown": "md", "md": "md", "txt": "txt",
+                    "python": "py", "py": "py", "json": "json", "yaml": "yaml",
+                    "csv": "csv", "sql": "sql", "html": "html", "go": "go",
+                    "rust": "rs", "rs": "rs",
+                }
+                ext = ext_aliases[extension_match.group(1)]
+                matches = [d for d in all_documents if d["extension"] == ext]
+                answer = (
+                    f"{len(matches)} file{'s' if len(matches) != 1 else ''} "
+                    f"with extension `.{ext}`."
+                )
+                return build_metadata_response(answer, matches)
+
+            # --- Filter by status ("not indexed", "synced", "failed", "changed") ---
+            status_filters = {
+                "not indexed": "not_indexed",
+                "not_indexed": "not_indexed",
+                "synced": "synced",
+                "failed": "failed",
+                "changed": "changed",
+            }
+            for phrase, status in status_filters.items():
+                if phrase in normalized_question:
+                    matches = [d for d in all_documents if d["status"] == status]
+                    if re.search(r"\bhow many\b", normalized_question):
+                        answer = f"{len(matches)} document{'s' if len(matches) != 1 else ''} with status `{status}`."
+                    else:
+                        if matches:
+                            answer = (
+                                f"{len(matches)} document{'s' if len(matches) != 1 else ''} with status `{status}`:\n"
+                                + "\n".join(f"- `{d['filename']}`" for d in matches)
+                            )
+                        else:
+                            answer = f"No documents have status `{status}`."
+                    return build_metadata_response(answer, matches)
+
+            # --- Plain count / plain list ---
+            count = len(all_documents)
+            if re.search(r"\bhow many\b|\bcount\b", normalized_question):
+                answer = f"There {'is' if count == 1 else 'are'} {count} document{'s' if count != 1 else ''} in this workspace."
+            else:
+                answer = (
+                    f"There {'is' if count == 1 else 'are'} {count} document{'s' if count != 1 else ''} in this workspace."
+                    + ("\n" + "\n".join(
+                        f"- {item['filename']} ({item['chunks']} chunks; {item['status']})"
+                        for item in all_documents
+                    ) if all_documents else "")
+                )
+            return build_metadata_response(answer, all_documents)
 
     query_parts = plan.parts or [plan.raw]
     modality = plan.intent
