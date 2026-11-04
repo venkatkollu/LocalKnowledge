@@ -70,6 +70,10 @@ LOCAL_BGE_MODEL = os.getenv("KNOWLEDGEOS_LOCAL_BGE_MODEL", "BAAI/bge-small-en-v1
 LOCAL_BGE_AUTO_LOAD = os.getenv("KNOWLEDGEOS_LOCAL_BGE_AUTO_LOAD", "true").lower() in {"1", "true", "yes"}
 ALLOW_HASH_EMBEDDING_FALLBACK = os.getenv("KNOWLEDGEOS_ALLOW_HASH_EMBEDDING_FALLBACK", "false").lower() in {"1", "true", "yes"}
 
+# Abstention relevance threshold (P0). Minimum max citation score to attempt an answer.
+# 0.15 legacy default; 0.6 recommended for production with real embeddings.
+ABSTAIN_THRESHOLD = float(os.getenv("KNOWLEDGEOS_ABSTAIN_THRESHOLD", "0.6"))
+
 # Claim-level NLI verification (P0). The cross-encoder is optional: when
 # sentence-transformers is not installed, the verifier degrades to a
 # deterministic lexical entailment score so citations are still checked.
@@ -593,6 +597,7 @@ class Settings:
         self.local_bge_model = LOCAL_BGE_MODEL
         self.local_bge_auto_load = LOCAL_BGE_AUTO_LOAD
         self.allow_hash_embedding_fallback = ALLOW_HASH_EMBEDDING_FALLBACK
+        self.abstain_threshold = float(os.getenv("KNOWLEDGEOS_ABSTAIN_THRESHOLD", "0.6"))
         self.allow_anonymous = os.getenv("KNOWLEDGEOS_ALLOW_ANONYMOUS", "true").lower() in {"1", "true", "yes"}
         auth_secret_value = load_or_create_secret(
             "KNOWLEDGEOS_AUTH_SECRET",
@@ -2584,7 +2589,7 @@ def answer_question(p: Principal, payload: ChatRequest) -> dict[str, Any]:
 
     timings["hybrid_retrieval"] = (time.perf_counter() - started) * 1000 - timings["query_embedding"]
     confidence = max((citation.get("score", 0) for citation in citations), default=0.0)
-    if not citations or confidence < 0.15:
+    if not citations or confidence < SETTINGS.abstain_threshold:
         decision = "abstain"
         answer = "I don't have enough indexed evidence to answer that question."
     elif provider:
@@ -2635,8 +2640,16 @@ def answer_question(p: Principal, payload: ChatRequest) -> dict[str, Any]:
 
     # Claim-level verification. A provider failure or extractive fallback stays
     # marked uncertain; only an unsupported answer is downgraded further.
+    # If the LLM explicitly says it doesn't know / evidence is insufficient, abstain.
     verification = verify_claims(answer, citations)
-    if verification["decision"] == "unsupported" and decision == "answer":
+    llm_says_unknown = any(
+        phrase in answer.lower()
+        for phrase in ("i don't know", "does not contain", "cannot answer", "insufficient evidence", "not enough information", "does not provide the answer", "does not state the")
+    )
+    if llm_says_unknown:
+        decision = "abstain"
+        answer = "I don't have enough indexed evidence to answer that question."
+    elif verification["decision"] == "unsupported" and decision == "answer":
         decision = "answer_with_uncertainty"
 
     if verification["claims"]:

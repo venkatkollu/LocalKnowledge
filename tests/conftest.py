@@ -23,6 +23,7 @@ def settings(monkeypatch, data_dir):
     monkeypatch.setenv("KNOWLEDGEOS_DATA_DIR", str(data_dir))
     monkeypatch.setenv("KNOWLEDGEOS_ALLOW_ANONYMOUS", "true")
     monkeypatch.setenv("KNOWLEDGEOS_ALLOW_HASH_EMBEDDING_FALLBACK", "true")
+    monkeypatch.setenv("KNOWLEDGEOS_ABSTAIN_THRESHOLD", "0.15")
     fresh = m.Settings()
     monkeypatch.setattr(m, "SETTINGS", fresh)
     return fresh
