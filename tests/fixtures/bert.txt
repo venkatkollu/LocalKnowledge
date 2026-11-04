@@ -1,0 +1,5 @@
+BERT-base uses 12 attention heads, 12 layers, and hidden size 768.
+
+BERT is pre-trained with masked language modeling and next-sentence prediction.
+
+BERT uses Adam with learning rate 1e-4 and L2 weight decay 0.01.
