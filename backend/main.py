@@ -2640,8 +2640,7 @@ def answer_question(p: Principal, payload: ChatRequest) -> dict[str, Any]:
 
     # Claim-level verification. A provider failure or extractive fallback stays
     # marked uncertain; only an unsupported answer is downgraded further.
-    # If the LLM explicitly says it doesn't know / evidence is insufficient, abstain.
-    verification = verify_claims(answer, citations)
+    # Detect if LLM says it doesn't know, then abstain.
     llm_says_unknown = any(
         phrase in answer.lower()
         for phrase in ("i don't know", "does not contain", "cannot answer", "insufficient evidence", "not enough information", "does not provide the answer", "does not state the")
@@ -2649,13 +2648,25 @@ def answer_question(p: Principal, payload: ChatRequest) -> dict[str, Any]:
     if llm_says_unknown:
         decision = "abstain"
         answer = "I don't have enough indexed evidence to answer that question."
-    elif verification["decision"] == "unsupported" and decision == "answer":
-        decision = "answer_with_uncertainty"
-
-    if verification["claims"]:
-        supported_chunks = {claim["citation_chunk_id"] for claim in verification["claims"] if claim["supported"]}
+        verification = {
+            "decision": "unsupported",
+            "claims": [],
+            "summary": "Abstained based on LLM uncertainty detection"
+        }
         for citation in citations:
-            citation["verification"] = "verified" if citation["chunk_id"] in supported_chunks else "unverified"
+            citation["verification"] = "unverified"
+    else:
+        verification = verify_claims(answer, citations)
+        if verification["decision"] == "unsupported" and decision == "answer":
+            decision = "answer_with_uncertainty"
+
+        if decision != "abstain" and verification["claims"]:
+            supported_chunks = {claim["citation_chunk_id"] for claim in verification["claims"] if claim["supported"]}
+            for citation in citations:
+                citation["verification"] = "verified" if citation["chunk_id"] in supported_chunks else "unverified"
+        else:
+            for citation in citations:
+                citation["verification"] = "unverified"
 
     trace_id = str(uuid.uuid4())
     response = {
