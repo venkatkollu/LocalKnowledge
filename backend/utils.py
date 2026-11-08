@@ -407,6 +407,71 @@ def sanitize_evidence(text: str) -> tuple[str, bool]:
 
 
 
+_THINK_BLOCK = re.compile(
+    r"<think(?:ing)?>.*?</think(?:ing)?>",
+    re.IGNORECASE | re.DOTALL,
+)
+
+# Small local models occasionally echo their instructions or narrate a plan
+# before the answer. These prefixes are only checked at the start of the text
+# so an answer that merely mentions the question is left alone.
+_META_SENTENCE_PREFIX = re.compile(
+    r"^\s*(?:"
+    r"(?:we|i)\s+(?:need|needs|have|must|should|will|can|could|would|are\s+given)\b"
+    r"|(?:we|i)['’]ll\b"
+    r"|need\s+[a-z]"
+    r"|let\s+me\b"
+    r"|the\s+user\s+(?:asks|wants|is|said)\b"
+    r"|the\s+question\s+(?:asks|is|says|wants|requires|mentions)\b"
+    r"|question\s*:"
+    r"|evidence\s*:"
+    r"|answer\s*:"
+    r"|(?:okay|ok|alright)\s*[,.]"
+    r"|to\s+answer\b"
+    r"|first\s*,"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def clean_generated_answer(text: str) -> str:
+    """Strip reasoning scaffolding that must never be shown as the answer.
+
+    Removes reasoning tags and leading planning/instruction sentences (for
+    example "We need answer the user's question..."). The answer body is not
+    touched: cleaning stops at the first sentence that is not scaffolding.
+    """
+    if not text:
+        return ""
+    cleaned = _THINK_BLOCK.sub(" ", text).strip()
+    while cleaned:
+        match = _META_SENTENCE_PREFIX.match(cleaned)
+        if not match:
+            break
+        sentence_end = re.search(r"[.!?](?:\s|$)", cleaned)
+        if sentence_end is None:
+            return ""
+        cleaned = cleaned[sentence_end.end():].lstrip()
+    return cleaned.strip()
+
+
+
+def trim_incomplete_tail(text: str) -> str:
+    """Drop a trailing fragment when generation stopped at the token limit."""
+    stripped = text.rstrip()
+    if not stripped or stripped[-1] in ".!?:;\"'”’)]}":
+        return stripped
+    boundaries = [
+        stripped.rfind(marker)
+        for marker in (". ", "! ", "? ", ".\n", "!\n", "?\n")
+    ]
+    boundary = max(boundaries)
+    if boundary >= max(40, len(stripped) // 2):
+        return stripped[: boundary + 1].rstrip()
+    return stripped
+
+
+
 def is_combined_question(question: str) -> bool:
     """True when the question asks which document covers a topic *and* what it says."""
     return bool(

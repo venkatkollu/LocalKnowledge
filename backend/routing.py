@@ -41,9 +41,13 @@ _CATALOG_SUBJECTS = re.compile(
     re.IGNORECASE,
 )
 
-# Fuzzy variants for common typos
+# Fuzzy variants for common typos. This list must stay limited to real
+# catalog nouns: generic aggregate words won't do. Treating "many" or
+# "number" as catalog subjects routed content questions such as "how many new
+# parameters does IA3 introduce?" to the metadata branch, which answered with
+# the document count instead of retrieved evidence.
 _CATALOG_VARIANTS = re.compile(
-    r"\b(chunks?|chunck?s?|chunks|chnk|chuncks|chunck|chunck|chuks|mny|many|num|numbr?|numb|amt|amount|qty|quantity)\b",
+    r"\b(chunks?|chunck?s?|chnk|chuncks|chuks)\b",
     re.IGNORECASE,
 )
 

@@ -23,7 +23,7 @@ APP_VERSION = "1.0.0"
 
 
 
-PROMPT_VERSION = "knowledgeos-answer-v2"
+PROMPT_VERSION = "knowledgeos-answer-v3"
 
 
 
@@ -50,7 +50,7 @@ CHUNK_OVERLAP = int(os.getenv("KNOWLEDGEOS_CHUNK_OVERLAP", "180"))
 
 
 
-MAX_ANSWER_TOKENS = int(os.getenv("KNOWLEDGEOS_MAX_ANSWER_TOKENS", "512"))
+MAX_ANSWER_TOKENS = int(os.getenv("KNOWLEDGEOS_MAX_ANSWER_TOKENS", "1024"))
 
 
 
