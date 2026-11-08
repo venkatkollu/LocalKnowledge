@@ -259,7 +259,7 @@ SQLite runs in WAL mode and stores metadata, jobs, chunks, FTS5 records, vectors
 | `KNOWLEDGEOS_DATA_DIR` | `data` | SQLite database, originals, and generated secrets |
 | `KNOWLEDGEOS_OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama endpoint |
 | `KNOWLEDGEOS_OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text` | Local embedding model |
-| `KNOWLEDGEOS_MAX_ANSWER_TOKENS` | `512` | Generation output limit |
+| `KNOWLEDGEOS_MAX_ANSWER_TOKENS` | `1024` | Generation output limit |
 | `KNOWLEDGEOS_ROUTER_LLM` | `auto` | Enable the LLM routing fallback |
 | `KNOWLEDGEOS_WORKERS` | `4` | Ingestion thread-pool size |
 | `KNOWLEDGEOS_ALLOW_ANONYMOUS` | `true` | Allow local requests without bearer auth |

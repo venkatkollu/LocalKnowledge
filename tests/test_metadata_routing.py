@@ -154,6 +154,14 @@ def test_pdf_page_counts(client, tmp_path):
     assert "1 file" in count["answer"]
 
 
+def test_content_question_with_aggregate_wording_is_not_catalog_answer(client, corpus):
+    r = chat(
+        client,
+        "How many new parameters does an adapter introduce, and what does it rescale?",
+    )
+    assert r["evidence"]["decision"] != "metadata_answer"
+
+
 def test_metadata_trace_outcome(client, corpus):
     chat(client, "list all documents")
     from backend.db import db

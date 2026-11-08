@@ -39,6 +39,26 @@ def test_vector_route_narrative_questions():
         assert d.route == "VECTOR", f"Expected VECTOR for {t!r}, got {d.route}"
 
 
+def test_content_questions_with_aggregate_wording_stay_vector():
+    """Generic words like "many" or "rank" are not catalog subjects.
+
+    Treating them as one sent content questions to the metadata branch, which
+    answered with the document count instead of retrieved evidence.
+    """
+    from backend.routing import classify_tier1
+
+    tests = [
+        "What three activation types does IA3 rescale with learned vectors, and "
+        "how many new parameters does it introduce relative to the base model?",
+        "Rank the methods by the fraction of trainable parameters they report.",
+        "How many parameters does LoRA introduce?",
+        "How many bias terms does BERT have?",
+    ]
+    for question in tests:
+        d = classify_tier1(question)
+        assert d.route == "VECTOR", f"Expected VECTOR for {question!r}, got {d.route}"
+
+
 def test_hybrid_route_combined_questions():
     from backend.routing import classify_tier1
     
