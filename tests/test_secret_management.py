@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 CLEARED_ENV = (
     "KNOWLEDGEOS_AUTH_SECRET",
     "KNOWLEDGEOS_AUTH_SECRET_FILE",
@@ -44,10 +44,13 @@ class SecretManagementTests(unittest.TestCase):
         snippet = r"""
 import os, sqlite3
 from pathlib import Path
-import backend.main as m
+from backend.config import SETTINGS
+from backend.db import SCHEMA, init_db
+from backend.main import app
+from backend.security import decrypt_key, encrypt_key
 
 data = Path(os.environ["KNOWLEDGEOS_DATA_DIR"])
-m.init_db()
+init_db()
 
 def mode(path):
     return path.stat().st_mode & 0o777
@@ -58,10 +61,10 @@ if os.name == "posix":
     assert mode(data / ".auth_secret") == 0o600
     assert mode(data / ".encryption_key") == 0o600
     assert mode(data / "knowledgeos.sqlite3") == 0o600
-assert m.SETTINGS.auth_secret != b"local-development-secret"
-assert len(m.SETTINGS.auth_secret) >= 32
-assert m.decrypt_key(m.encrypt_key("round-trip")) == "round-trip"
-with sqlite3.connect(m.SETTINGS.db_path) as connection:
+assert SETTINGS.auth_secret != b"local-development-secret"
+assert len(SETTINGS.auth_secret) >= 32
+assert decrypt_key(encrypt_key("round-trip")) == "round-trip"
+with sqlite3.connect(SETTINGS.db_path) as connection:
     assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
 print("OK")
 """
@@ -75,15 +78,18 @@ print("OK")
 import base64, hashlib, os, sqlite3, uuid
 from pathlib import Path
 from cryptography.fernet import Fernet, InvalidToken
-import backend.main as m
+from backend.config import SETTINGS
+from backend.db import SCHEMA, init_db
+from backend.main import app
+from backend.security import decrypt_key, encrypt_key
 
 data = Path(os.environ["KNOWLEDGEOS_DATA_DIR"])
 legacy = Fernet(base64.urlsafe_b64encode(hashlib.sha256(b"local-development-secret/provider-keys").digest()))
 plaintext = "sk-legacy-test-key"
 token = legacy.encrypt(plaintext.encode()).decode()
 
-with sqlite3.connect(m.SETTINGS.db_path) as connection:
-    connection.executescript(m.SCHEMA)
+with sqlite3.connect(SETTINGS.db_path) as connection:
+    connection.executescript(SCHEMA)
     connection.execute("INSERT OR IGNORE INTO workspaces(id,name,created_at) VALUES ('default','Default workspace',0)")
     connection.execute(
         "INSERT INTO provider_profiles(id,workspace_id,name,kind,base_url,model,role,encrypted_key,enabled,failure_count,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,1,0,0,0)",
@@ -91,11 +97,11 @@ with sqlite3.connect(m.SETTINGS.db_path) as connection:
     )
     connection.commit()
 
-m.init_db()
-with sqlite3.connect(m.SETTINGS.db_path) as connection:
+init_db()
+with sqlite3.connect(SETTINGS.db_path) as connection:
     migrated = connection.execute("SELECT encrypted_key FROM provider_profiles").fetchone()[0]
 assert migrated != token
-assert m.decrypt_key(migrated) == plaintext
+assert decrypt_key(migrated) == plaintext
 
 backups = sorted((data / "backups").glob("*.sqlite3"))
 assert len(backups) == 1, backups
@@ -104,14 +110,14 @@ if os.name == "posix":
 with sqlite3.connect(backups[0]) as connection:
     backup_token = connection.execute("SELECT encrypted_key FROM provider_profiles").fetchone()[0]
 assert backup_token == migrated
-assert m.decrypt_key(backup_token) == plaintext
+assert decrypt_key(backup_token) == plaintext
 try:
     legacy.decrypt(backup_token.encode())
     raise AssertionError("legacy key must not decrypt the rewritten backup")
 except InvalidToken:
     pass
 
-m.init_db()
+init_db()
 assert len(list((data / "backups").glob("*.sqlite3"))) == 1
 print("OK")
 """
@@ -124,13 +130,16 @@ print("OK")
         snippet = r"""
 import base64, hashlib, os
 from pathlib import Path
-import backend.main as m
+from backend.config import SETTINGS
+from backend.db import SCHEMA, init_db
+from backend.main import app
+from backend.security import decrypt_key, encrypt_key
 
 data = Path(os.environ["KNOWLEDGEOS_DATA_DIR"])
 auth = b"custom-secret-that-is-long-enough-123"
 derived = base64.urlsafe_b64encode(hashlib.sha256(auth + b"/provider-keys").digest())
-assert m.SETTINGS.auth_secret == auth
-assert m.SETTINGS.encryption_key != derived
+assert SETTINGS.auth_secret == auth
+assert SETTINGS.encryption_key != derived
 assert not (data / ".auth_secret").exists()
 if os.name == "posix":
     assert (data / ".encryption_key").stat().st_mode & 0o777 == 0o600
@@ -149,9 +158,12 @@ print("OK")
         snippet = r"""
 import os
 from fastapi.testclient import TestClient
-import backend.main as m
+from backend.config import SETTINGS
+from backend.db import SCHEMA, init_db
+from backend.main import app
+from backend.security import decrypt_key, encrypt_key
 
-with TestClient(m.app) as client:
+with TestClient(app) as client:
     assert client.get("/api/health").status_code == 200
     created = client.post(
         "/api/models/profiles",

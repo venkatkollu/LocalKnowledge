@@ -52,7 +52,7 @@
 - **Prompt-injection guard** that redacts instruction-like markers from retrieved evidence and wraps it in `<evidence>` delimiters before the provider request.
 - **Inspectable chunking** with configurable chunk size and overlap, typed chunks (text, heading, table, figure, list, code, equation), page numbers, section titles, character offsets, line ranges, token counts, SHA-256 deduplication, and version history. <br><img src="docs/screenshots/docs-chunks.png" width="300" alt="Document chunks interface">
 - **Blue-green indexes** that can be created, built, validated, evaluated, activated, and rolled back without interrupting the active revision. Builds materialize per-index membership and embeddings; the active index tracks the live corpus so new documents stay searchable without mixing embedding spaces.
-- **Local embeddings** through Ollama (`all-minilm` by default), with optional OpenAI-compatible embedding or generation profiles.
+- **Local embeddings** through Ollama (`nomic-embed-text` by default), with optional OpenAI-compatible embedding or generation profiles.
 - **Evaluation and observability** with Recall@100, nDCG@10, MRR@10, traces, latency percentiles, stage timings, query outcomes, and storage metrics.
 - **Performance** UI <br><img src="docs/screenshots/performance.png" width="300" alt="Performance interface">
 - **Workspace isolation** on every persistent row, optional bearer authentication, encrypted provider keys, and a Docker Compose deployment.
@@ -246,7 +246,7 @@ The React/Vite application provides the workspace shell, chat experience, docume
 
 ### Backend
 
-The FastAPI service in [`backend/main.py`](./backend/main.py) owns authentication, workspace resolution, ingestion jobs, parsing, chunking, embeddings, FTS5 indexing, dense retrieval, semantic cache, streaming answers, traces, feedback, metrics, and index lifecycle operations.
+The FastAPI service is assembled in [`backend/main.py`](./backend/main.py). It only creates the app, installs CORS and lifespan, and mounts the routers in [`backend/api`](./backend/api). Domain behavior is split into focused modules under [`backend/`](./backend): authentication, parsing and ingestion, structure-aware chunking, provider transport, FTS5/dense retrieval, query routing, the answer pipeline, caching, claim verification, and the index lifecycle. See [`backend/ARCHITECTURE.md`](./backend/ARCHITECTURE.md) for the dependency rules and request flow.
 
 ### Local data plane
 
@@ -258,7 +258,9 @@ SQLite runs in WAL mode and stores metadata, jobs, chunks, FTS5 records, vectors
 | --- | --- | --- |
 | `KNOWLEDGEOS_DATA_DIR` | `data` | SQLite database, originals, and generated secrets |
 | `KNOWLEDGEOS_OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama endpoint |
-| `KNOWLEDGEOS_OLLAMA_EMBEDDING_MODEL` | `all-minilm` | Local embedding model |
+| `KNOWLEDGEOS_OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text` | Local embedding model |
+| `KNOWLEDGEOS_MAX_ANSWER_TOKENS` | `512` | Generation output limit |
+| `KNOWLEDGEOS_ROUTER_LLM` | `auto` | Enable the LLM routing fallback |
 | `KNOWLEDGEOS_WORKERS` | `4` | Ingestion thread-pool size |
 | `KNOWLEDGEOS_ALLOW_ANONYMOUS` | `true` | Allow local requests without bearer auth |
 | `KNOWLEDGEOS_AUTH_SECRET` | generated at `data/.auth_secret` | HMAC key for bearer tokens |
@@ -288,7 +290,9 @@ See [`.env.example`](./.env.example) and [`.env.docker.example`](./.env.docker.e
 ```text
 .
 ├── backend/
-│   ├── main.py                 # FastAPI app and local RAG engine
+│   ├── main.py                 # Thin FastAPI app assembler
+│   ├── api/                    # Resource routers (chat, documents, indexes, models, evaluations, system)
+│   ├── config.py, db.py, …     # Domain modules (see backend/ARCHITECTURE.md)
 │   ├── requirements.txt        # Python dependencies
 │   └── run.sh                  # Backend launcher
 ├── frontend/
@@ -306,6 +310,7 @@ See [`.env.example`](./.env.example) and [`.env.docker.example`](./.env.docker.e
 │   │   ├── architecture.png       # Primary hand-drawn architecture visual
 │   │   └── Eco Knowledge Network Logo.png
 │   └── screenshots/            # Runtime UI screenshots
+├── tests/                      # pytest behavior suite + standalone checks
 ├── docker/
 │   ├── Dockerfile              # Frontend build (multi-stage)
 │   ├── docker-compose.yml      # CPU Compose stack
@@ -320,10 +325,11 @@ python3 -m pip install -r backend/requirements-dev.txt
 
 cd frontend && npm run build && npm run lint
 cd ../backend && python3 -m py_compile main.py
-cd .. && python3 -m unittest discover -s backend/tests -v
+cd .. && python3 -m pytest
+python3 tests/smoke_runner.py
 ```
 
-The production frontend build and the backend secret-lifecycle tests pass. ESLint currently reports only existing React Fast Refresh export warnings in shared UI modules; there are no lint errors.
+The pytest suite fakes the provider and executor call sites so it does not need Ollama. `tests/test_secret_management.py` and `tests/retrieval_and_cache_checks.py` are standalone subprocess characterization suites.
 
 ## 🔒 Security notes
 

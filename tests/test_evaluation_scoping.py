@@ -1,6 +1,7 @@
 import pytest
 from fastapi import HTTPException
-import backend.main as m
+from backend.auth import Principal
+from backend.indexes import run_index_evaluation
 from conftest import chat, chunk_ids_for, active_index_with_corpus
 
 
@@ -13,8 +14,8 @@ def test_eval_passes_when_candidate_contains_expected(client, corpus, active_ind
         "question": "What optimizer does LoRA use?",
         "expected_chunk_id": lora_chunks[0],
     })
-    p = m.Principal(workspace_id="default", user_id="local")
-    result = m.run_index_evaluation(idx_id, p)
+    p = Principal(workspace_id="default", user_id="local")
+    result = run_index_evaluation(idx_id, p)
     assert result["index"]["evaluation_score"] is not None
     assert result["index"]["evaluated"] is True
 
@@ -25,8 +26,8 @@ def test_eval_fails_when_index_not_ready(client, corpus):
     v1 = create["index"]["id"]
     # Don't build or validate
 
-    p = m.Principal(workspace_id="default", user_id="local")
+    p = Principal(workspace_id="default", user_id="local")
     with pytest.raises(HTTPException) as exc:
-        m.run_index_evaluation(v1, p)
+        run_index_evaluation(v1, p)
     assert exc.value.status_code == 409
     assert "Build and validate" in str(exc.value.detail)

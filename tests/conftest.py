@@ -6,7 +6,12 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-import backend.main as m
+from backend import answering, auth, config, db as db_module, ingestion, providers, runtime
+from backend.api import system as system_api
+from backend.config import Settings
+from backend.db import db, init_db
+from backend.main import app
+from backend.utils import deterministic_vector
 
 
 # --- isolation ---------------------------------------------------------------
@@ -24,14 +29,16 @@ def settings(monkeypatch, data_dir):
     monkeypatch.setenv("KNOWLEDGEOS_ALLOW_ANONYMOUS", "true")
     monkeypatch.setenv("KNOWLEDGEOS_ALLOW_HASH_EMBEDDING_FALLBACK", "true")
     monkeypatch.setenv("KNOWLEDGEOS_ABSTAIN_THRESHOLD", "0.15")
-    fresh = m.Settings()
-    monkeypatch.setattr(m, "SETTINGS", fresh)
+    fresh = Settings()
+    for module in (config, db_module, providers, ingestion, answering, auth, system_api):
+        monkeypatch.setattr(module, "SETTINGS", fresh, raising=False)
+    init_db()
     return fresh
 
 
 @pytest.fixture()
 def client(settings):
-    with TestClient(m.app) as c:
+    with TestClient(app) as c:
         yield c
 
 
@@ -49,7 +56,7 @@ def deterministic_embeddings(monkeypatch):
     def fake_embed(row, text):
         key = _normalize(text)
         if key not in cache:
-            cache[key] = m.deterministic_vector(key, dimensions=64)
+            cache[key] = deterministic_vector(key, dimensions=64)
         return cache[key]
 
     def fake_provider(row, path, payload, timeout=30.0, method="POST"):
@@ -66,14 +73,14 @@ def deterministic_embeddings(monkeypatch):
             return {"data": [{"id": "fake"}]}
         return {}
 
-    monkeypatch.setattr(m, "embed_text", fake_embed)
-    monkeypatch.setattr(m, "ollama_embed_text", lambda text: fake_embed(None, text))
-    monkeypatch.setattr(m, "provider_request", fake_provider)
+    monkeypatch.setattr(providers, "embed_text", fake_embed)
+    monkeypatch.setattr(providers, "ollama_embed_text", lambda text: fake_embed(None, text))
+    monkeypatch.setattr(providers, "provider_request", fake_provider)
 
 
 @pytest.fixture(autouse=True)
 def sync_executor(monkeypatch):
-    monkeypatch.setattr(m.EXECUTOR, "submit", lambda fn, *a, **kw: fn(*a, **kw))
+    monkeypatch.setattr(runtime.EXECUTOR, "submit", lambda fn, *a, **kw: fn(*a, **kw))
 
 
 # --- corpus ------------------------------------------------------------------
@@ -117,12 +124,12 @@ def chat(client, question: str, **extra):
 
 
 def cache_count() -> int:
-    with m.db() as conn:
+    with db() as conn:
         return conn.execute("SELECT COUNT(*) FROM cache_entries").fetchone()[0]
 
 
 def chunk_ids_for(doc_id: str) -> list[str]:
-    with m.db() as conn:
+    with db() as conn:
         return [
             row[0]
             for row in conn.execute(

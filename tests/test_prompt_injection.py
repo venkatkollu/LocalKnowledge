@@ -1,5 +1,5 @@
 import pytest
-from backend.main import sanitize_evidence
+from backend.utils import sanitize_evidence
 
 
 @pytest.mark.parametrize("payload", [
