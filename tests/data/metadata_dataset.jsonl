@@ -1,0 +1,157 @@
+{"id": "M001", "question": "How many documents are in this workspace?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M002", "question": "Count the documents", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M003", "question": "How many files do I have?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M004", "question": "What is the total size of all documents?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M005", "question": "How big is the corpus?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M006", "question": "What's the average document size?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M007", "question": "Which document has the most chunks?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M008", "question": "Which document has the fewest chunks?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M009", "question": "List documents with zero chunks", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M010", "question": "How many documents have zero chunks?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M011", "question": "Top 5 documents by chunk count", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M012", "question": "Which documents have more chunks than the average?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M013", "question": "Show me all documents", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M014", "question": "Documents uploaded this month", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M015", "question": "How many documents were uploaded last week?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M016", "question": "Documents uploaded since 2023-01-01", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M017", "question": "Documents before 2020-01-01", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M018", "question": "Which documents are PDFs?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M019", "question": "How many documents are markdown?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M020", "question": "Documents with status 'failed'", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M021", "question": "Documents with status 'synced'", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M022", "question": "Which documents have matching section paths?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M023", "question": "Which document has the most chunks?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M024", "question": "Which document has the fewest chunks?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M025", "question": "What is the total size of all documents?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M026", "question": "What is the average document size?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M027", "question": "Which document is the largest?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M028", "question": "Which document is the smallest?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M029", "question": "List documents with zero chunks", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M030", "question": "How many documents have zero chunks?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M031", "question": "List documents with zero chunks", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "M032", "question": "How many documents have zero chunks?", "label": "SQL", "category": "metadata_retrieval"}
+{"id": "C001", "question": "What is the maximum reimbursement amount? Cite the source.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C002", "question": "What does the policy say about refunds?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C003", "question": "Explain the chunking strategy.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C004", "question": "Why was the model fine-tuned?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C005", "question": "How does the retrieval pipeline work?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C006", "question": "What are the eligibility and application requirements?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C007", "question": "What does page 12 say about termination?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C008", "question": "Explain the requirements in section 4.2.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C009", "question": "What is the annual fee for category B? Cite the table.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C010", "question": "What documents are required for registration?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C011", "question": "Compare the refund policies in both documents.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C012", "question": "Which department approves the request, and what is its approval limit?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C013", "question": "What evidence supports the stated interest rate?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C014", "question": "Are all claims in the answer supported by citations?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C015", "question": "Does the cited passage actually answer the question?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C016", "question": "Does the citation point to the smallest useful supporting passage?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C017", "question": "Two documents give different values. Explain the discrepancy with citations.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C018", "question": "What is the CEO's salary? Cite evidence if available.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C019", "question": "Does the cited page or section actually exist?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C020", "question": "Cite the latest policy version.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C021", "question": "Does the citation support the answer using the parent context?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C022", "question": "Are multiple citations attached to the correct individual claims?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C023", "question": "Does the citation resolve to the correct original document?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C024", "question": "Does every factual paragraph have sufficient evidence?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C025", "question": "What is the maximum reimbursement amount?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C026", "question": "What are the eligibility and application requirements?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C027", "question": "What does page 12 say about termination?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C028", "question": "Explain the requirements in section 4.2.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C029", "question": "What is the annual fee for category B?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C030", "question": "What documents are required for registration?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C031", "question": "What does the whitepaper say about alignment?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C032", "question": "Which document introduced the transformer?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C033", "question": "Which source contains table analysis and what does it say?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C034", "question": "Which document introduced the transformer and what is its key insight?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C035", "question": "Which source contains table analysis and what does it say?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "X001", "question": "Which documents discuss data retention?", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X002", "question": "Which documents mention the same eligibility criteria?", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X003", "question": "Compare the refund policies in both documents.", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X004", "question": "Which documents discuss data retention?", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X005", "question": "Which documents mention the same eligibility criteria?", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X006", "question": "Compare the refund policies in both documents.", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X007", "question": "Which documents discuss LoRA techniques?", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X008", "question": "Compare LoRA and QLoRA approaches.", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X009", "question": "Which documents mention parameter efficiency?", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X010", "question": "Compare AdaLoRA and LoRA parameter efficiency.", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X011", "question": "Which documents discuss quantization?", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X012", "question": "Compare QLoRA and LoRA quantization approaches.", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X013", "question": "Which documents discuss low-rank adaptation?", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X014", "question": "Compare LoRA and DoRA approaches.", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X015", "question": "Which documents discuss rank adaptation?", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X016", "question": "Compare AdaLoRA and LoRA rank adaptation.", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X017", "question": "Which documents discuss parameter-efficient fine-tuning?", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X018", "question": "Compare LoRA variants for parameter efficiency.", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X019", "question": "Which documents discuss low-rank decomposition?", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X020", "question": "Compare DoRA and LoRA weight decomposition.", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "X021", "question": "Which documents discuss structured fine-tuning?", "label": "HYBRID", "category": "cross_document_citations"}
+{"id": "PC001", "question": "Does the citation support the answer using the parent context?", "label": "HYBRID", "category": "parent_child_citations"}
+{"id": "PC002", "question": "Does the citation support the answer using the parent context?", "label": "HYBRID", "category": "parent_child_citations"}
+{"id": "PC003", "question": "What is the parent section of this retrieved chunk?", "label": "HYBRID", "category": "parent_child_citations"}
+{"id": "PC004", "question": "What is the parent section of this retrieved chunk?", "label": "HYBRID", "category": "parent_child_citations"}
+{"id": "PC005", "question": "Does the citation support the answer using the parent context?", "label": "HYBRID", "category": "parent_child_citations"}
+{"id": "PC006", "question": "Does the citation support the answer using the parent context?", "label": "HYBRID", "category": "parent_child_citations"}
+{"id": "PC007", "question": "What is the parent section of this retrieved chunk?", "label": "HYBRID", "category": "parent_child_citations"}
+{"id": "PC008", "question": "What is the parent section of this retrieved chunk?", "label": "HYBRID", "category": "parent_child_citations"}
+{"id": "PC009", "question": "Does the citation support the answer using the parent context?", "label": "HYBRID", "category": "parent_child_citations"}
+{"id": "PC010", "question": "Does the citation support the answer using the parent context?", "label": "HYBRID", "category": "parent_child_citations"}
+{"id": "PC011", "question": "What is the parent section of this retrieved chunk?", "label": "HYBRID", "category": "parent_child_citations"}
+{"id": "PC012", "question": "What is the parent section of this retrieved chunk?", "label": "HYBRID", "category": "parent_child_citations"}
+{"id": "PC013", "question": "Does the citation support the answer using the parent context?", "label": "HYBRID", "category": "parent_child_citations"}
+{"id": "PC014", "question": "Does the citation support the answer using the parent context?", "label": "HYBRID", "category": "parent_child_citations"}
+{"id": "PC015", "question": "What is the parent section of this retrieved chunk?", "label": "HYBRID", "category": "parent_child_citations"}
+{"id": "V001", "question": "Cite the latest policy version.", "label": "VECTOR", "category": "version_source_integrity"}
+{"id": "V002", "question": "Cite the latest policy version.", "label": "VECTOR", "category": "version_source_integrity"}
+{"id": "V003", "question": "Are there multiple versions of this document?", "label": "SQL", "category": "version_source_integrity"}
+{"id": "V004", "question": "Are there multiple versions of this document?", "label": "SQL", "category": "version_source_integrity"}
+{"id": "V005", "question": "Which documents have matching section paths?", "label": "SQL", "category": "version_source_integrity"}
+{"id": "V006", "question": "Which documents have matching section paths?", "label": "SQL", "category": "version_source_integrity"}
+{"id": "V007", "question": "How many documents have zero chunks?", "label": "SQL", "category": "version_source_integrity"}
+{"id": "V008", "question": "How many documents have zero chunks?", "label": "SQL", "category": "version_source_integrity"}
+{"id": "V009", "question": "Which document has the most chunks?", "label": "SQL", "category": "version_source_integrity"}
+{"id": "V010", "question": "Which document has the fewest chunks?", "label": "SQL", "category": "version_source_integrity"}
+{"id": "V011", "question": "What is the total size of all documents?", "label": "SQL", "category": "version_source_integrity"}
+{"id": "V012", "question": "What is the average document size?", "label": "SQL", "category": "version_source_integrity"}
+{"id": "V013", "question": "Which document is the largest?", "label": "SQL", "category": "version_source_integrity"}
+{"id": "V014", "question": "Which document is the smallest?", "label": "SQL", "category": "version_source_integrity"}
+{"id": "V015", "question": "List documents with zero chunks", "label": "SQL", "category": "version_source_integrity"}
+{"id": "E001", "question": "Is the document author specified?", "label": "SQL", "category": "missing_metadata_edge_cases"}
+{"id": "E002", "question": "Is the document author specified?", "label": "SQL", "category": "missing_metadata_edge_cases"}
+{"id": "E003", "question": "Which document contains the leave policy?", "label": "SQL", "category": "missing_metadata_edge_cases"}
+{"id": "E004", "question": "Which document contains the leave policy?", "label": "SQL", "category": "missing_metadata_edge_cases"}
+{"id": "E005", "question": "What is the original filename of the source?", "label": "SQL", "category": "missing_metadata_edge_cases"}
+{"id": "E006", "question": "What is the original filename of the source?", "label": "SQL", "category": "missing_metadata_edge_cases"}
+{"id": "E007", "question": "What size error occurred during sync?", "label": "VECTOR", "category": "missing_metadata_edge_cases"}
+{"id": "E008", "question": "What size error occurred during sync?", "label": "VECTOR", "category": "missing_metadata_edge_cases"}
+{"id": "E009", "question": "What file size was recorded?", "label": "VECTOR", "category": "missing_metadata_edge_cases"}
+{"id": "E010", "question": "What file size was recorded?", "label": "VECTOR", "category": "missing_metadata_edge_cases"}
+{"id": "E011", "question": "What does the introduction say about models?", "label": "VECTOR", "category": "missing_metadata_edge_cases"}
+{"id": "E012", "question": "What does the introduction say about models?", "label": "VECTOR", "category": "missing_metadata_edge_cases"}
+{"id": "E013", "question": "What size limit applies to uploads?", "label": "VECTOR", "category": "missing_metadata_edge_cases"}
+{"id": "E014", "question": "What size limit applies to uploads?", "label": "VECTOR", "category": "missing_metadata_edge_cases"}
+{"id": "E015", "question": "What is the API rate limit?", "label": "VECTOR", "category": "missing_metadata_edge_cases"}
+{"id": "CC001", "question": "Does the answer about LoRA optimizer cite the source?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "CC002", "question": "Does the answer about LoRA optimizer cite the source?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "CC003", "question": "Does the answer about LoRA optimizer cite the source?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "CC004", "question": "Does the answer about LoRA optimizer cite the source?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "CC005", "question": "Does the answer about LoRA optimizer cite the source?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "CC006", "question": "Does the answer about LoRA optimizer cite the source?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "CC007", "question": "Does the answer about LoRA optimizer cite the source?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "CC008", "question": "Does the answer about LoRA optimizer cite the source?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "CC009", "question": "Does the answer about LoRA optimizer cite the source?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "CC010", "question": "Does the answer about LoRA optimizer cite the source?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "MP001", "question": "How many chunks does lora.txt have?", "label": "SQL", "category": "metadata_preservation"}
+{"id": "MP002", "question": "How many chunks does lora.txt have?", "label": "SQL", "category": "metadata_preservation"}
+{"id": "MP003", "question": "How many chunks does lora.txt have?", "label": "SQL", "category": "metadata_preservation"}
+{"id": "MP004", "question": "How many chunks does lora.txt have?", "label": "SQL", "category": "metadata_preservation"}
+{"id": "MP005", "question": "How many chunks does lora.txt have?", "label": "SQL", "category": "metadata_preservation"}
+{"id": "MP006", "question": "How many chunks does lora.txt have?", "label": "SQL", "category": "metadata_preservation"}
+{"id": "MP007", "question": "How many chunks does lora.txt have?", "label": "SQL", "category": "metadata_preservation"}
+{"id": "MP008", "question": "How many chunks does lora.txt have?", "label": "SQL", "category": "metadata_preservation"}
+{"id": "MP009", "question": "How many chunks does lora.txt have?", "label": "SQL", "category": "metadata_preservation"}
+{"id": "MP010", "question": "How many chunks does lora.txt have?", "label": "SQL", "category": "metadata_preservation"}
+{"id": "MP011", "question": "How many chunks does lora.txt have?", "label": "SQL", "category": "metadata_preservation"}
+{"id": "MP012", "question": "How many chunks does lora.txt have?", "label": "SQL", "category": "metadata_preservation"}
+{"id": "X179", "question": "What is LoRA?", "label": "VECTOR", "category": "miscellaneous"}
+{"id": "X180", "question": "What is LoRA?", "label": "VECTOR", "category": "miscellaneous"}

@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-MODEL="${KNOWLEDGEOS_OLLAMA_EMBEDDING_MODEL:-all-minilm}"
+MODEL="${KNOWLEDGEOS_OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}"
 OLLAMA_HOST="${OLLAMA_HOST:-127.0.0.1:11434}"
 API_URL="http://${OLLAMA_HOST}"
 LOG_DIR="${KNOWLEDGEOS_DATA_DIR:-data}/ollama"

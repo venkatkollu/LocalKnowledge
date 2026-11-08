@@ -1,0 +1,30 @@
+{"id": "C001", "question": "What is the maximum reimbursement amount? Cite the source.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C002", "question": "What does the policy say about refunds?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C003", "question": "Explain the chunking strategy.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C004", "question": "Why was the model fine-tuned?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C005", "question": "How does the retrieval pipeline work?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C006", "question": "What are the eligibility and application requirements?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C007", "question": "What does page 12 say about termination?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C008", "question": "Explain the requirements in section 4.2.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C009", "question": "What is the annual fee for category B? Cite the table.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C010", "question": "What documents are required for registration?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C011", "question": "Compare the refund policies in both documents.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C012", "question": "Which department approves the request, and what is its approval limit?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C013", "question": "What evidence supports the stated interest rate?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C014", "question": "Are all claims in the answer supported by citations?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C015", "question": "Does the cited passage actually answer the question?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C016", "question": "Does the citation point to the smallest useful supporting passage?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C017", "question": "Two documents give different values. Explain the discrepancy with citations.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C018", "question": "What is the CEO's salary? Cite evidence if available.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C019", "question": "Does the cited page or section actually exist?", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "C020", "question": "Cite the latest policy version.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "CC001", "question": "Are all claims in the answer supported by citations?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "CC002", "question": "Does the cited passage actually answer the question?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "CC003", "question": "Does the citation point to the smallest useful supporting passage?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "CC004", "question": "Does every factual paragraph have sufficient evidence?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "CC005", "question": "Is the citation context preserved in the answer?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "CC006", "question": "Are multiple citations attached to the correct individual claims?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "CC007", "question": "Does the citation resolve to the correct original document?", "label": "VECTOR", "category": "citation_completeness"}
+{"id": "CC008", "question": "What optimizer does LoRA use? Cite the evidence.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "CC009", "question": "Does QLoRA quantize the base model? Cite the passage.", "label": "VECTOR", "category": "citation_accuracy"}
+{"id": "CC010", "question": "How many attention heads does BERT-base use? Cite the source.", "label": "VECTOR", "category": "citation_accuracy"}

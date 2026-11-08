@@ -5,7 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-import backend.main as m
+from backend.chunking import CHUNK_TYPES
+from backend.utils import classify_chunk, split_chunks
 from conftest import chat
 
 
@@ -51,19 +52,19 @@ def test_chunk_metadata_contract(client, corpus):
 
 
 def test_chunk_type_classification():
-    assert m.classify_chunk("# Title") == "heading"
-    assert m.classify_chunk("| a | b |\n| --- | --- |\n| 1 | 2 |") == "table"
-    assert m.classify_chunk("- one\n- two") == "list"
-    assert m.classify_chunk("```python\nprint(1)\n```") == "code"
-    assert m.classify_chunk("$$\nx = y\n$$") == "equation"
-    assert m.classify_chunk("Figure 2: attention map") == "figure"
-    assert m.classify_chunk("Plain paragraph.") == "text"
-    assert set(m.CHUNK_TYPES) == {"text", "heading", "table", "figure", "list", "code", "equation"}
+    assert classify_chunk("# Title") == "heading"
+    assert classify_chunk("| a | b |\n| --- | --- |\n| 1 | 2 |") == "table"
+    assert classify_chunk("- one\n- two") == "list"
+    assert classify_chunk("```python\nprint(1)\n```") == "code"
+    assert classify_chunk("$$\nx = y\n$$") == "equation"
+    assert classify_chunk("Figure 2: attention map") == "figure"
+    assert classify_chunk("Plain paragraph.") == "text"
+    assert set(CHUNK_TYPES) == {"text", "heading", "table", "figure", "list", "code", "equation"}
 
 
 def test_chunk_positions_page_and_sections():
     text = "# Intro\n\n" + ("a" * 1300) + "\n\n## Methods\n\n" + ("b" * 1300)
-    chunks = m.split_chunks(text, [(1, 0, len(text) // 2), (2, len(text) // 2, len(text))])
+    chunks = split_chunks(text, [(1, 0, len(text) // 2), (2, len(text) // 2, len(text))])
     assert chunks[0]["section"] == "Intro"
     assert any(chunk["section"] == "Methods" for chunk in chunks)
     assert chunks[-1]["page_number"] == 2

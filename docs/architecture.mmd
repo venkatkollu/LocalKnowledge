@@ -1,0 +1,98 @@
+%% Local KnowledgeOS backend architecture.
+%% Keep this graph in sync with backend/main.py, backend/api/ and backend/ARCHITECTURE.md.
+flowchart TB
+    UI[React / Vite frontend]
+
+    subgraph App[FastAPI application]
+        MAIN[backend.main<br/>app assembler<br/>CORS + lifespan + include_router]
+
+        subgraph Routers[backend/api routers]
+            R_CHAT[chat.py]
+            R_DOCS[documents.py]
+            R_INDEX[indexes.py]
+            R_MODELS[models.py]
+            R_EVAL[evaluations.py]
+            R_SYS[system.py]
+        end
+
+        subgraph Domain[Domain modules]
+            ANSWER[answering.py]
+            ROUTE[routing.py]
+            RETRIEVE[retrieval.py]
+            INGEST[ingestion.py]
+            CHUNK[chunking.py]
+            PARSE[parsing.py]
+            INDEX[indexes.py]
+            CACHE[cache.py]
+            VERIFY[verification.py]
+            PROVIDERS[providers.py]
+            DOCS[documents.py]
+            AUTH[auth.py]
+        end
+
+        subgraph Foundation[Foundation]
+            UTILS[utils.py]
+            DB[db.py]
+            CONFIG[config.py]
+            SECURITY[security.py]
+            RUNTIME[runtime.py]
+        end
+    end
+
+    subgraph Data[Local data plane]
+        SQLITE[(SQLite WAL + FTS5)]
+        FILES[(data/files/workspace)]
+        OLLAMA[(Ollama / OpenAI-compatible<br/>generation + embeddings)]
+    end
+
+    UI -->|HTTP / SSE| MAIN
+    MAIN --> R_CHAT & R_DOCS & R_INDEX & R_MODELS & R_EVAL & R_SYS
+
+    R_CHAT --> ANSWER
+    R_DOCS --> INGEST
+    R_DOCS --> DOCS
+    R_INDEX --> INDEX
+    R_MODELS --> PROVIDERS
+    R_EVAL --> VERIFY
+    R_SYS --> PROVIDERS
+    R_SYS --> DB
+
+    ANSWER --> ROUTE
+    ANSWER --> RETRIEVE
+    ANSWER --> CACHE
+    ANSWER --> VERIFY
+    ANSWER --> PROVIDERS
+    ANSWER --> INDEX
+    ANSWER --> INGEST
+
+    ROUTE --> DB
+    ROUTE --> PROVIDERS
+    RETRIEVE --> DB
+    RETRIEVE --> PROVIDERS
+
+    INGEST --> PARSE
+    INGEST --> CHUNK
+    INGEST --> PROVIDERS
+    INGEST --> INDEX
+    INGEST --> DOCS
+    CHUNK --> UTILS
+    PARSE --> UTILS
+
+    INDEX --> RETRIEVE
+    INDEX --> PROVIDERS
+    CACHE --> DB
+    VERIFY --> CONFIG
+    DOCS --> UTILS
+
+    DB --> CONFIG
+    PROVIDERS --> CONFIG
+    PROVIDERS --> SECURITY
+    PROVIDERS --> RUNTIME
+    SECURITY --> CONFIG
+    UTILS --> CONFIG
+    AUTH --> DB
+    AUTH --> CONFIG
+
+    DB --> SQLITE
+    INGEST --> FILES
+    PROVIDERS --> OLLAMA

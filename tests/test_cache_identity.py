@@ -4,7 +4,9 @@ from conftest import chat, cache_count, active_index_with_corpus
 def test_same_query_hits_cache(client, corpus, active_index_with_corpus):
     chat(client, "What is LoRA?")
     b = chat(client, "What is LoRA?")
-    with __import__("backend.main", fromlist=["db"]).db() as conn:
+    from backend.db import db
+
+    with db() as conn:
         hit = conn.execute(
             "SELECT cache_hit FROM traces WHERE id=?", (b["trace_id"],)
         ).fetchone()[0]
@@ -20,11 +22,12 @@ def test_lora_vs_qlora_not_collided(client, corpus, active_index_with_corpus):
 
 
 def test_eval_toggle_round_trip():
-    import backend.main as m
-    assert m.cache_disabled_for_eval() is False
-    m._set_eval_active(True)
+    from backend.cache import _set_eval_active, cache_disabled_for_eval
+
+    assert cache_disabled_for_eval() is False
+    _set_eval_active(True)
     try:
-        assert m.cache_disabled_for_eval() is True
+        assert cache_disabled_for_eval() is True
     finally:
-        m._set_eval_active(False)
-    assert m.cache_disabled_for_eval() is False
+        _set_eval_active(False)
+    assert cache_disabled_for_eval() is False

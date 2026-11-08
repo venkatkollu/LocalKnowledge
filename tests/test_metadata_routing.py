@@ -1,4 +1,3 @@
-import pytest
 from conftest import chat
 
 
@@ -13,6 +12,38 @@ def test_list_documents(client, corpus):
     assert r["evidence"]["decision"] == "metadata_answer"
     for name in corpus:
         assert name in r["answer"]
+
+
+def test_document_names_list(client, corpus):
+    r = chat(client, "what are the document names")
+    assert r["evidence"]["decision"] == "metadata_answer"
+    for name in corpus:
+        assert name in r["answer"]
+
+
+def test_catalog_overview_answers_from_metadata(client, corpus):
+    r = chat(client, "what are all the documents about")
+    assert r["evidence"]["decision"] == "metadata_answer"
+    assert r["citations"] == []
+    assert "lora.txt" in r["answer"]
+    assert "LoRA freezes" in r["answer"]
+    # The empty fixture has no chunks, so it has nothing to summarize.
+    assert "empty.txt" not in r["answer"]
+
+
+def test_catalog_overview_leaves_named_content_questions_to_retrieval():
+    from backend.utils import is_catalog_overview
+
+    assert is_catalog_overview("what are all the pdfs about?")
+    assert is_catalog_overview("summarize the documents")
+    assert not is_catalog_overview("what does lora.txt say about the optimizer?")
+    assert not is_catalog_overview("what are the documents about LoRA?")
+
+
+def test_greeting_typo_is_conversational(client):
+    r = chat(client, "helo")
+    assert r["evidence"]["decision"] == "conversational"
+    assert r["citations"] == []
 
 
 def test_zero_chunks_count(client, corpus):
@@ -68,7 +99,7 @@ def test_status_filter(client, corpus):
 def test_metadata_bypasses_retrieval(client, corpus, monkeypatch):
     def boom(*a, **kw):
         raise AssertionError("retrieve() called for a metadata question")
-    monkeypatch.setattr("backend.main.retrieve", boom)
+    monkeypatch.setattr("backend.answering.retrieve", boom)
     r = chat(client, "how many documents")
     assert r["evidence"]["decision"] == "metadata_answer"
 
@@ -114,10 +145,20 @@ def test_pdf_page_counts(client, tmp_path):
     assert total["evidence"]["decision"] == "metadata_answer"
     assert "3 pages" in total["answer"]
 
+    names = chat(client, "what are the pdfs names")
+    assert names["evidence"]["decision"] == "metadata_answer"
+    assert "paper.pdf" in names["answer"]
+
+    count = chat(client, "how many files are pdfs")
+    assert count["evidence"]["decision"] == "metadata_answer"
+    assert "1 file" in count["answer"]
+
 
 def test_metadata_trace_outcome(client, corpus):
     chat(client, "list all documents")
-    with __import__("backend.main", fromlist=["db"]).db() as conn:
+    from backend.db import db
+
+    with db() as conn:
         row = conn.execute(
             "SELECT outcome FROM traces WHERE route='/chat' "
             "ORDER BY created_at DESC LIMIT 1"

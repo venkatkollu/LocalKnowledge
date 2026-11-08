@@ -1,0 +1,50 @@
+{"id": "rs-001", "question": "How many documents are in this workspace?", "label": "SQL", "notes": "simple aggregate count"}
+{"id": "rs-002", "question": "Count the documents", "label": "SQL", "notes": "count keyword"}
+{"id": "rs-003", "question": "How many files do I have?", "label": "SQL", "notes": "aggregate with files"}
+{"id": "rs-004", "question": "What is the total size of all documents?", "label": "SQL", "notes": "size aggregate"}
+{"id": "rs-005", "question": "How big is the corpus?", "label": "SQL", "notes": "how big query"}
+{"id": "rs-006", "question": "What's the average document size?", "label": "SQL", "notes": "size average"}
+{"id": "rs-007", "question": "Which document has the most chunks?", "label": "SQL", "notes": "superlative chunks"}
+{"id": "rs-008", "question": "Which document has the fewest chunks?", "label": "SQL", "notes": "superlative fewest"}
+{"id": "rs-009", "question": "List documents with zero chunks", "label": "SQL", "notes": "zero chunks filter"}
+{"id": "rs-010", "question": "Top 5 documents by chunk count", "label": "SQL", "notes": "ranking"}
+{"id": "rs-011", "question": "Which documents have more chunks than the average?", "label": "SQL", "notes": "comparison average"}
+{"id": "rs-012", "question": "Show me all documents", "label": "SQL", "notes": "list documents"}
+{"id": "rs-013", "question": "Documents uploaded this month", "label": "SQL", "notes": "relative date"}
+{"id": "rs-014", "question": "How many documents were uploaded last week?", "label": "SQL", "notes": "relative date"}
+{"id": "rs-015", "question": "Documents uploaded since 2023-01-01", "label": "SQL", "notes": "absolute date"}
+{"id": "rs-016", "question": "Documents before 2020-01-01", "label": "SQL", "notes": "before date"}
+{"id": "rs-017", "question": "Which documents are PDFs?", "label": "SQL", "notes": "extension filter"}
+{"id": "rs-018", "question": "How many documents are markdown?", "label": "SQL", "notes": "extension count"}
+{"id": "rs-019", "question": "Documents with status failed", "label": "SQL", "notes": "status filter"}
+{"id": "rs-020", "question": "What does the policy say about refunds?", "label": "VECTOR", "notes": "narrative content"}
+{"id": "rs-021", "question": "Explain the chunking strategy", "label": "VECTOR", "notes": "explain content"}
+{"id": "rs-022", "question": "Why was the model fine-tuned?", "label": "VECTOR", "notes": "why question content"}
+{"id": "rs-023", "question": "How does the retrieval pipeline work?", "label": "VECTOR", "notes": "how does content"}
+{"id": "rs-024", "question": "What are the key findings?", "label": "VECTOR", "notes": "content question"}
+{"id": "rs-025", "question": "Summarize the evaluation results", "label": "VECTOR", "notes": "summarize content"}
+{"id": "rs-026", "question": "Compare the old and new benchmarks", "label": "VECTOR", "notes": "compare content"}
+{"id": "rs-027", "question": "What is the token limit for the model?", "label": "VECTOR", "notes": "factual config"}
+{"id": "rs-028", "question": "How do I reset my password?", "label": "VECTOR", "notes": "instruction content"}
+{"id": "rs-029", "question": "What size limit applies to uploads?", "label": "VECTOR", "notes": "size fact without aggregate"}
+{"id": "rs-030", "question": "Which document discusses compliance and what does it say?", "label": "HYBRID", "notes": "combined query"}
+{"id": "rs-031", "question": "Which source contains table analysis and what does it say?", "label": "HYBRID", "notes": "combined with structure"}
+{"id": "rs-032", "question": "Which document introduced the transformer and what is its key insight?", "label": "HYBRID", "notes": "combined what"}
+{"id": "rs-033", "question": "Documents containing tables", "label": "SQL", "notes": "structural catalog stat"}
+{"id": "rs-034", "question": "How many tables are in the documents?", "label": "SQL", "notes": "table count aggregate"}
+{"id": "rs-035", "question": "Which documents have figures?", "label": "SQL", "notes": "figure stat"}
+{"id": "rs-036", "question": "ID: DOC-1234", "label": "SQL", "notes": "exact ID prefix"}
+{"id": "rs-037", "question": "Find file ABC-5678", "label": "SQL", "notes": "exact ID with find"}
+{"id": "rs-038", "question": "How many times does the policy mention refunds?", "label": "VECTOR", "notes": "content marker veto for SQL"}
+{"id": "rs-039", "question": "What size error occurred during sync?", "label": "VECTOR", "notes": "size without aggregate"}
+{"id": "rs-040", "question": "List the largest files by size", "label": "SQL", "notes": "largest with size filter"}
+{"id": "rs-041", "question": "List the documents", "label": "SQL", "notes": "plain list"}
+{"id": "rs-042", "question": "Document count", "label": "SQL", "notes": "plain count"}
+{"id": "rs-043", "question": "Tell me about AI safety", "label": "VECTOR", "notes": "tell me content"}
+{"id": "rs-044", "question": "What documents are affected by the change?", "label": "SQL", "notes": "status lookup"}
+{"id": "rs-045", "question": "Largest files by size", "label": "SQL", "notes": "size ranking"}
+{"id": "rs-046", "question": "ID: alpha-1234", "label": "SQL", "notes": "exact ID lowercase"}
+{"id": "rs-047", "question": "Documents from January 2024", "label": "SQL", "notes": "year with month name"}
+{"id": "rs-048", "question": "What size error occurred during sync", "label": "VECTOR", "notes": "fact without catalog"}
+{"id": "rs-049", "question": "Documents created after 2023", "label": "SQL", "notes": "date relative"}
+{"id": "rs-050", "question": "What does the introduction say about models?", "label": "VECTOR", "notes": "content without catalog"}

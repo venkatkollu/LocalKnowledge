@@ -2,7 +2,9 @@ import json
 from pathlib import Path
 
 import pytest
-import backend.main as m
+from backend.auth import Principal
+from backend.db import db
+from backend.indexes import run_index_evaluation
 from conftest import chunk_ids_for, active_index_with_corpus
 
 GOLDEN = json.loads((Path(__file__).parent / "data" / "golden_set.json").read_text())
@@ -28,10 +30,10 @@ def test_golden_recall_at_least_07(client, corpus, active_index_with_corpus):
 
     assert registered > 0, "no golden items registered"
 
-    p = m.Principal(workspace_id="default", user_id="local")
-    m.run_index_evaluation(idx_id, p)
+    p = Principal(workspace_id="default", user_id="local")
+    run_index_evaluation(idx_id, p)
 
-    with m.db() as conn:
+    with db() as conn:
         row = conn.execute(
             "SELECT recall100, ndcg10, mrr10 FROM evaluations "
             "WHERE index_version=? ORDER BY created_at DESC LIMIT 1",
