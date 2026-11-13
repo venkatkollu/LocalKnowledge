@@ -55,8 +55,18 @@
 - **Local embeddings** through Ollama (`nomic-embed-text` by default), with optional OpenAI-compatible embedding or generation profiles.
 - **Evaluation and observability** with Recall@100, nDCG@10, MRR@10, traces, latency percentiles, stage timings, query outcomes, and storage metrics.
 - **Performance** UI <br><img src="docs/screenshots/performance.png" width="300" alt="Performance interface">
+- **Catalog graph** that projects documents, versions, and chunks into an interactive node-link view. Documents are grouped by version and colored by chunk type; chunks load on demand per document so the view stays fast on large workspaces.
+- **Conversation history** for follow-up questions. The client sends the last few turns and the backend resolves anaphora ("explain that in simple terms", "why?") against the previous grounded answer instead of searching the follow-up as a standalone query.
 - **Workspace isolation** on every persistent row, optional bearer authentication, encrypted provider keys, and a Docker Compose deployment.
 - **Document ingestion UI** <br><img src="docs/screenshots/doc-ingestion.png" width="200" alt="Document ingestion interface">
+
+## 🕸️ Catalog graph
+
+The **Graph** view projects the workspace catalog into an interactive node-link map. Documents are grouped by version and colored by chunk type (text, heading, table, figure, list, code, equation), so you can see at a glance how a corpus is structured and where each chunk type lives.
+
+- Nodes are laid out with a force-directed simulation; pan, zoom, and drag are supported.
+- Click a document node to load its chunks (capped at 500 per document) and inspect each chunk's ordinal, type, page, section, symbol, line range, token count, and excerpt.
+- The graph is read-only and workspace-scoped, like every other view; it queries `GET /api/graph` behind the same authentication as the rest of the API.
 
 ## 🖥️ Product preview
 
@@ -149,6 +159,7 @@ Candidate revisions are evaluated before activation. The active revision remains
   - [Local development](#local-development)
   - [Offline smoke test](#offline-smoke-test)
 - [Usage](#-usage)
+- [Catalog graph](#-catalog-graph)
 - [Architecture](#-architecture)
 - [Configuration](#-configuration)
 - [Repository structure](#-repository-structure)
@@ -246,7 +257,11 @@ The React/Vite application provides the workspace shell, chat experience, docume
 
 ### Backend
 
-The FastAPI service is assembled in [`backend/main.py`](./backend/main.py). It only creates the app, installs CORS and lifespan, and mounts the routers in [`backend/api`](./backend/api). Domain behavior is split into focused modules under [`backend/`](./backend): authentication, parsing and ingestion, structure-aware chunking, provider transport, FTS5/dense retrieval, query routing, the answer pipeline, caching, claim verification, and the index lifecycle. See [`backend/ARCHITECTURE.md`](./backend/ARCHITECTURE.md) for the dependency rules and request flow.
+The FastAPI service is assembled in [`backend/main.py`](./backend/main.py). It only creates the app, installs CORS and lifespan, and mounts the routers in [`backend/api`](./backend/api) — chat, documents, graph, indexes, models, evaluations, and system. Domain behavior is split into focused modules under [`backend/`](./backend): authentication, parsing and ingestion, structure-aware chunking, provider transport, FTS5/dense retrieval, query routing, the answer pipeline, caching, claim verification, and the index lifecycle. See [`backend/ARCHITECTURE.md`](./backend/ARCHITECTURE.md) for the dependency rules and request flow.
+
+### Conversation history
+
+Chat requests now carry an optional `history` list of previous turns (oldest first, up to 12). The answer pipeline keeps the last few turns, whitespace-collapses and trims them, and reuses the previous grounded answer when a follow-up is anaphoric ("explain that in simple terms", "why?", "tell me more"). A follow-up that names a file is treated as self-contained and is not blended with the previous question.
 
 ### Local data plane
 
@@ -291,7 +306,7 @@ See [`.env.example`](./.env.example) and [`.env.docker.example`](./.env.docker.e
 .
 ├── backend/
 │   ├── main.py                 # Thin FastAPI app assembler
-│   ├── api/                    # Resource routers (chat, documents, indexes, models, evaluations, system)
+│   ├── api/                    # Resource routers (chat, documents, graph, indexes, models, evaluations, system)
 │   ├── config.py, db.py, …     # Domain modules (see backend/ARCHITECTURE.md)
 │   ├── requirements.txt        # Python dependencies
 │   └── run.sh                  # Backend launcher
@@ -299,7 +314,8 @@ See [`.env.example`](./.env.example) and [`.env.docker.example`](./.env.docker.e
 │   ├── src/
 │   │   ├── api/                    # Typed API clients and domain types
 │   │   ├── components/             # Chat, documents, indexes, shell, and UI primitives
-│   │   ├── pages/                  # Workspace routes
+│   │   │   └── graph/              # Catalog graph canvas, inspector, and selection types
+│   │   ├── pages/                  # Workspace routes (Ask, Documents, Graph, Indexes, …)
 │   │   └── hooks/                  # Health, documents, auth, and telemetry
 │   ├── package.json
 │   ├── tsconfig.json
